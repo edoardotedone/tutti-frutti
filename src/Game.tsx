@@ -528,8 +528,8 @@ export default function Game() {
 
   return (
     <div ref={containerRef} className="flex flex-col items-center justify-center min-h-screen bg-[#fdfaf3] p-4 select-none touch-none font-sans overflow-hidden">
-      {/* Dynamic Scaling Container for Mobile */}
-      <div className="flex flex-col items-center max-h-screen scale-[0.85] xs:scale-90 sm:scale-100 origin-center">
+      {/* Responsive Container */}
+      <div className="flex flex-col items-center w-full max-w-[400px] h-[85dvh] max-h-[85dvh]">
         {/* UI Header */}
         <div className="w-full max-w-[400px] flex justify-between items-end mb-4 px-2">
         <div className="flex flex-col">
@@ -570,16 +570,16 @@ export default function Game() {
         </div>
       </div>
 
-      {/* Game Canvas */}
-      <div className="relative bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b]">
-        <canvas
-          ref={canvasRef}
-          className="bg-transparent"
-          onMouseMove={onInteractionMove}
-          onMouseUp={onInteractionEnd}
-          onTouchMove={onInteractionMove}
-          onTouchEnd={onInteractionEnd}
-        />
+       {/* Game Canvas Container */}
+       <div className="relative w-full h-full bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b] aspect-[4/6]">
+         <canvas
+           ref={canvasRef}
+           className="w-full h-full bg-transparent block"
+           onMouseMove={onInteractionMove}
+           onMouseUp={onInteractionEnd}
+           onTouchMove={onInteractionMove}
+           onTouchEnd={onInteractionEnd}
+         />
 
         {/* Start Overlay */}
         {!isStarted && !isGameOver && (
