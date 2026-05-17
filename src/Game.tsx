@@ -57,18 +57,18 @@ const FRUIT_LEVELS = [
 ];
 
 const ASSET_MAPPING: Record<number, string> = {
-  0: '/assets/fruit_0.png',
-  1: '/assets/fruit_1.png',
-  2: '/assets/fruit_2.png',
-  3: '/assets/fruit_3.png',
-  4: '/assets/fruit_4.png',
-  5: '/assets/fruit_5.png',
-  6: '/assets/fruit_6.png',
-  7: '/assets/fruit_7.png',
-  8: '/assets/fruit_8.png',
-  9: '/assets/fruit_9.png',
-  10: '/assets/fruit_10.png',
-  11: '/assets/fruit_11.png',
+  0: './assets/fruit_0.png',
+  1: './assets/fruit_1.png',
+  2: './assets/fruit_2.png',
+  3: './assets/fruit_3.png',
+  4: './assets/fruit_4.png',
+  5: './assets/fruit_5.png',
+  6: './assets/fruit_6.png',
+  7: './assets/fruit_7.png',
+  8: './assets/fruit_8.png',
+  9: './assets/fruit_9.png',
+  10: './assets/fruit_10.png',
+  11: './assets/fruit_11.png',
 };
 
 // --- Components ---
