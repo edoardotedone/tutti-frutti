@@ -591,8 +591,8 @@ export default function Game() {
               <div className="w-16 h-16 bg-[#ff6b6b] rounded-full flex items-center justify-center text-white mb-4 shadow-lg group-hover:bg-[#ff5252]">
                 <Play fill="currentColor" size={32} className="ml-1" />
               </div>
-              <span className="text-2xl font-bold">Start Merge</span>
-              <span className="text-sm text-slate-500 mt-1 uppercase tracking-widest">Suika Clone</span>
+              <span className="text-2xl font-bold">Uniscile Tutte</span>
+              <span className="text-sm text-slate-500 mt-1 uppercase tracking-widest">Tutti Frutti</span>
             </button>
           </div>
         )}
