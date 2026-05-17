@@ -494,10 +494,10 @@ export default function Game() {
     <div ref={containerRef} className="w-full max-w-[400px] h-[100dvh] flex flex-col bg-[#fdfaf3] select-none touch-none font-sans overflow-hidden mx-auto">
       <div className="flex flex-col w-full h-full">
         {/* UI Header */}
-        <div className="w-full max-w-[400px] flex justify-between items-end mb-4 px-2 shrink-0">
+        <div className="w-full max-w-[400px] flex justify-between items-end mb-1 px-2 shrink-0">
           <div className="flex flex-col">
-            <span className="text-xs uppercase tracking-widest text-slate-500 font-semibold">Score</span>
-            <span className="text-4xl font-bold text-slate-800 tabular-nums leading-none">{score}</span>
+            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Score</span>
+            <span className="text-3xl font-bold text-slate-800 tabular-nums leading-none">{score}</span>
           </div>
           <div className="flex items-center gap-4">
              <div className="flex flex-col items-center bg-white/50 p-2 rounded-2xl border border-slate-200 min-w-16">
@@ -533,8 +533,8 @@ export default function Game() {
         </div>
 
          {/* Game Canvas Container */}
-         <div className="flex-1 w-full relative my-4 min-h-0 flex items-end justify-center">
-           <div className="relative aspect-[400/600] w-full max-w-[400px] bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b]">
+         <div className="flex-1 w-full relative min-h-0 flex items-end justify-center overflow-hidden">
+           <div className="relative aspect-[400/600] h-full max-h-full w-auto max-w-full bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b]">
              <canvas
                ref={canvasRef}
                className="w-full h-full block"
@@ -579,7 +579,7 @@ export default function Game() {
       </div>
 
       {/* Evolution Info (Bottom Bar) */}
-      <div className="w-full max-w-[400px] mt-6 overflow-x-auto no-scrollbar py-2 shrink-0">
+      <div className="w-full max-w-[400px] mt-1 overflow-x-auto no-scrollbar py-1 shrink-0">
         <div className="flex gap-4 px-4 min-w-max items-center">
           {FRUIT_LEVELS.slice(0, 11).map((fruit, i) => (
             <div key={i} className={cn("flex flex-col items-center opacity-40 transition-opacity", score > 0 && "opacity-100")}>
