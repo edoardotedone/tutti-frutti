@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, memo, useMemo } from 'react';
 import Matter from 'matter-js';
 import { Trophy, RefreshCw, Play } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
@@ -70,9 +70,80 @@ const ASSET_MAPPING: Record<number, string> = {
   11: './assets/fruit_11.png',
 };
 
-// --- Components ---
+// --- Sub-components ---
 
-export default function Game() {
+const Scoreboard = memo(({ score, bestScore }: { score: number; bestScore: number }) => (
+  <div className="w-full max-w-[400px] flex justify-between items-end mb-1 px-2 shrink-0">
+    <div className="flex flex-col">
+      <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Score</span>
+      <span className="text-3xl font-bold text-slate-800 tabular-nums leading-none">{score}</span>
+    </div>
+    <div className="flex items-center gap-4">
+      <div className="flex flex-col items-end">
+        <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-[#d4af37] font-semibold">
+          <Trophy size={10} strokeWidth={3} />
+          Best
+        </div>
+        <span className="text-xl font-bold text-slate-600 tabular-nums leading-none">{bestScore}</span>
+      </div>
+    </div>
+  </div>
+));
+
+const NextFruitIndicator = memo(({ nextType, loadedTextures }: { nextType: number; loadedTextures: Record<number, HTMLCanvasElement> }) => (
+  <div className="flex flex-col items-center bg-white/50 p-1 rounded-xl border border-slate-200 min-w-[56px]">
+    <span className="text-[9px] uppercase tracking-tighter text-slate-400 mb-0.5">Next</span>
+    <div className="relative w-8 h-8 flex items-center justify-center">
+      {loadedTextures[nextType] ? (
+        <img 
+          src={loadedTextures[nextType].toDataURL()} 
+          alt="Next fruit" 
+          className="w-6 h-6 object-contain"
+        />
+      ) : (
+        <div 
+          className="w-6 h-6 rounded-full flex items-center justify-center text-sm shadow-sm" 
+          style={{ 
+            backgroundColor: FRUIT_LEVELS[nextType].color,
+            border: `2px solid ${shadeColor(FRUIT_LEVELS[nextType].color, -20)}`
+          }}
+        >
+          {FRUIT_LEVELS[nextType].icon}
+        </div>
+      )}
+    </div>
+  </div>
+));
+
+const EvolutionBar = memo(({ score }: { score: number }) => (
+  <div className="w-full max-w-[400px] mt-1 overflow-x-auto no-scrollbar py-1 shrink-0">
+    <div className="flex gap-4 px-4 min-w-max items-center">
+      {FRUIT_LEVELS.slice(0, 11).map((fruit, i) => (
+        <div key={i} className={cn("flex flex-col items-center opacity-40 transition-opacity", score > 0 && "opacity-100")}>
+          <div 
+            className="rounded-full shadow-sm flex items-center justify-center overflow-hidden border border-black/5" 
+            style={{ 
+              backgroundColor: fruit.color, 
+              width: 16 + i*2.5, 
+              height: 16 + i*2.5 
+            }}
+          >
+            {/* Note: textures are passed via props to the parent which we'll handle in Game */}
+             <span style={{ fontSize: `${10 + i * 0.5}px` }}>{fruit.icon}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+));
+
+// --- Main Component ---
+
+interface GameProps {
+  loadedTextures: Record<number, HTMLCanvasElement>;
+}
+
+export default function Game({ loadedTextures }: GameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine | null>(null);
@@ -90,19 +161,16 @@ export default function Game() {
   const [isGameOver, setIsGameOver] = useState(false);
   const [isStarted, setIsStarted] = useState(false);
 
-  const [loadedTextures, setLoadedTextures] = useState<Record<number, HTMLCanvasElement>>({});
   const audioCtxRef = useRef<AudioContext | null>(null);
-
-  // Audio System
-  // Use a simple ref to track last sound time to avoid audio congestion on mobile
   const lastSoundTimeRef = useRef(0);
+
+  // --- Audio System ---
 
   const playMergeSound = (level: number) => {
     if (!audioCtxRef.current) return;
     const ctx = audioCtxRef.current;
     if (ctx.state === 'suspended') ctx.resume();
     
-    // Prevent too many merge sounds overlapping
     const now = ctx.currentTime;
     if (now - lastSoundTimeRef.current < 0.1) return;
     lastSoundTimeRef.current = now;
@@ -130,7 +198,6 @@ export default function Game() {
     const ctx = audioCtxRef.current;
     if (ctx.state === 'suspended') ctx.resume();
 
-    // Throttle collision sounds heavily for mobile performance
     const now = ctx.currentTime;
     if (now - lastSoundTimeRef.current < 0.05) return; 
     lastSoundTimeRef.current = now;
@@ -151,7 +218,8 @@ export default function Game() {
     osc.stop(now + 0.1);
   };
 
-  // Initialize Best Score & Audio
+  // --- Game Logic ---
+
   useEffect(() => {
     const saved = localStorage.getItem('suika-best-score');
     if (saved) setBestScore(parseInt(saved, 10));
@@ -168,78 +236,7 @@ export default function Game() {
     window.addEventListener('touchstart', handleFirstInteraction);
   }, []);
 
-  // Pre-process Textures with Circular Mask
-  useEffect(() => {
-    const loadAndProcess = async () => {
-      const textures: Record<number, HTMLCanvasElement> = {};
-      for (const [level, url] of Object.entries(ASSET_MAPPING)) {
-        const lvl = parseInt(level, 10);
-        try {
-          const img = new Image();
-          img.src = url;
-          await new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-          });
-
-          // Create offscreen canvas for masking
-          const offCanvas = document.createElement('canvas');
-          const radius = FRUIT_LEVELS[lvl].radius;
-          const size = radius * 2;
-          offCanvas.width = size;
-          offCanvas.height = size;
-          const ctx = offCanvas.getContext('2d');
-          if (ctx) {
-            ctx.beginPath();
-            ctx.arc(radius, radius, radius, 0, Math.PI * 2);
-            ctx.clip();
-            ctx.drawImage(img, 0, 0, size, size);
-            textures[lvl] = offCanvas;
-          }
-        } catch (e) {
-          // Fallback: Glossy circle + Emoji icon
-          const offCanvas = document.createElement('canvas');
-          const radius = FRUIT_LEVELS[lvl].radius;
-          const size = radius * 2;
-          offCanvas.width = size;
-          offCanvas.height = size;
-          const ctx = offCanvas.getContext('2d');
-          if (ctx) {
-            // Main body
-            const gradient = ctx.createRadialGradient(radius, radius, 0, radius, radius, radius);
-            gradient.addColorStop(0, FRUIT_LEVELS[lvl].color);
-            gradient.addColorStop(1, shadeColor(FRUIT_LEVELS[lvl].color, -20));
-            
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(radius, radius, radius - 2, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            // Reflection
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-            ctx.beginPath();
-            ctx.ellipse(radius * 0.6, radius * 0.5, radius * 0.3, radius * 0.15, -Math.PI / 4, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Emoji
-            ctx.font = `${radius * 1.2}px Inter, sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(FRUIT_LEVELS[lvl].icon, radius, radius + radius * 0.1);
-            
-            textures[lvl] = offCanvas;
-          }
-        }
-      }
-      setLoadedTextures(textures);
-    };
-    loadAndProcess();
-  }, []);
-
-  const spawnFruit = (level: number, x: number, y: number, isStatic = false) => {
+  const spawnFruit = (level: number, x: number, y: number) => {
     if (!engineRef.current) return null;
     const config = FRUIT_LEVELS[level];
     const fruit = Matter.Bodies.circle(x, y, config.radius, {
@@ -249,20 +246,52 @@ export default function Game() {
       slop: 0.02,
       sleepThreshold: 360,
       label: `fruit_${level}`,
-      isStatic,
-      collisionFilter: {
-        group: 0,
-        category: 0x0001,
-        mask: 0x0001,
-      },
-      render: {
-        visible: false,
-      }
+      isStatic: false,
+      collisionFilter: { group: 0, category: 0x0001, mask: 0x0001 },
+      render: { visible: false }
     });
 
     (fruit as any).spawnTime = Date.now();
     Matter.Composite.add(engineRef.current.world, fruit);
     return fruit;
+  };
+
+  const createWalls = () => {
+    if (!engineRef.current) return;
+    const thickness = 1000;
+    const walls = [
+      Matter.Bodies.rectangle(CANVAS_WIDTH / 2, CANVAS_HEIGHT + thickness / 2, CANVAS_WIDTH + thickness, thickness, { isStatic: true, friction: 0.8, restitution: 0.1 }),
+      Matter.Bodies.rectangle(-thickness / 2, CANVAS_HEIGHT / 2, thickness, CANVAS_HEIGHT * 2, { isStatic: true, friction: 0.8, restitution: 0.1 }),
+      Matter.Bodies.rectangle(CANVAS_WIDTH + thickness / 2, CANVAS_HEIGHT / 2, thickness, CANVAS_HEIGHT * 2, { isStatic: true, friction: 0.8, restitution: 0.1 }),
+    ];
+    Matter.Composite.add(engineRef.current.world, walls);
+  };
+
+  const handleMerge = (pair: Matter.IPair) => {
+    const { bodyA, bodyB } = pair;
+    if (!bodyA.label.startsWith('fruit_') || !bodyB.label.startsWith('fruit_')) return;
+    if (bodyA.label === bodyB.label) {
+      const level = parseInt(bodyA.label.split('_')[1], 10);
+      if (level >= FRUIT_LEVELS.length - 1) return;
+
+      const midX = (bodyA.position.x + bodyB.position.x) / 2;
+      const midY = (bodyA.position.y + bodyB.position.y) / 2;
+
+      Matter.Composite.remove(engineRef.current!.world, [bodyA, bodyB]);
+
+      const newFruit = spawnFruit(level + 1, midX, midY);
+      if (newFruit) Matter.Sleeping.set(newFruit, false);
+      
+      playMergeSound(level);
+      setScore(prev => {
+        const newScore = prev + FRUIT_LEVELS[level].score;
+        if (newScore > bestScore) {
+          setBestScore(newScore);
+          localStorage.setItem('suika-best-score', newScore.toString());
+        }
+        return newScore;
+      });
+    }
   };
 
   const startNewGame = () => {
@@ -282,66 +311,8 @@ export default function Game() {
     }
   };
 
-  const createWalls = () => {
-    if (!engineRef.current) return;
-    const thickness = 1000;
-    const walls = [
-      Matter.Bodies.rectangle(CANVAS_WIDTH / 2, CANVAS_HEIGHT + thickness / 2, CANVAS_WIDTH + thickness, thickness, { 
-        isStatic: true, 
-        friction: 0.8,
-        restitution: 0.1
-      }),
-      Matter.Bodies.rectangle(-thickness / 2, CANVAS_HEIGHT / 2, thickness, CANVAS_HEIGHT * 2, { 
-        isStatic: true,
-        friction: 0.8,
-        restitution: 0.1
-      }),
-      Matter.Bodies.rectangle(CANVAS_WIDTH + thickness / 2, CANVAS_HEIGHT / 2, thickness, CANVAS_HEIGHT * 2, { 
-        isStatic: true,
-        friction: 0.8,
-        restitution: 0.1
-      }),
-    ];
-    Matter.Composite.add(engineRef.current.world, walls);
-  };
-
-  const handleMerge = (pair: Matter.IPair) => {
-    const { bodyA, bodyB } = pair;
-    if (!bodyA.label.startsWith('fruit_') || !bodyB.label.startsWith('fruit_')) return;
-    if (bodyA.label === bodyB.label) {
-      const level = parseInt(bodyA.label.split('_')[1], 10);
-      if (level >= FRUIT_LEVELS.length - 1) return;
-
-      const midX = (bodyA.position.x + bodyB.position.x) / 2;
-      const midY = (bodyA.position.y + bodyB.position.y) / 2;
-
-      Matter.Composite.remove(engineRef.current!.world, [bodyA, bodyB]);
-
-      const newFruit = spawnFruit(level + 1, midX, midY);
-      if (newFruit) {
-        // Instead of waking ALL bodies, we only wake the one that was just created 
-        // and its immediate neighbors if necessary. Matter's engine usually handles this,
-        // but let's be more surgical than iterating over everything.
-        Matter.Sleeping.set(newFruit, false);
-      }
-      playMergeSound(level);
-      setScore(prev => {
-        const newScore = prev + FRUIT_LEVELS[level].score;
-        if (newScore > bestScore) {
-          setBestScore(newScore);
-          localStorage.setItem('suika-best-score', newScore.toString());
-        }
-        return newScore;
-      });
-    }
-  };
-
   useEffect(() => {
-    const engine = Matter.Engine.create({
-      enableSleeping: true,
-      velocityIterations: 15,
-      positionIterations: 15,
-    });
+    const engine = Matter.Engine.create({ enableSleeping: true });
     const runner = Matter.Runner.create();
     engineRef.current = engine;
     runnerRef.current = runner;
@@ -349,12 +320,7 @@ export default function Game() {
     const render = Matter.Render.create({
       canvas: canvasRef.current!,
       engine: engine,
-      options: {
-        width: CANVAS_WIDTH,
-        height: CANVAS_HEIGHT,
-        wireframes: false,
-        background: 'transparent',
-      }
+      options: { width: CANVAS_WIDTH, height: CANVAS_HEIGHT, wireframes: false, background: 'transparent' }
     });
     renderRef.current = render;
 
@@ -363,8 +329,7 @@ export default function Game() {
     Matter.Events.on(engine, 'collisionStart', (event) => {
       event.pairs.forEach(pair => {
         handleMerge(pair);
-        const intensity = pair.collision.speed;
-        playCollisionSound(intensity);
+        playCollisionSound(pair.collision.speed);
       });
     });
 
@@ -372,18 +337,15 @@ export default function Game() {
 
     const loop = () => {
       if (isGameOver) return;
-      
       const ctx = canvasRef.current?.getContext('2d');
       if (ctx && engine.world.bodies.length > 0) {
         ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+        // Draw Dead Line
         ctx.setLineDash([5, 5]);
         ctx.strokeStyle = '#ff4444';
         ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(0, GAME_OVER_Y);
-        ctx.lineTo(CANVAS_WIDTH, GAME_OVER_Y);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, GAME_OVER_Y); ctx.lineTo(CANVAS_WIDTH, GAME_OVER_Y); ctx.stroke();
         ctx.setLineDash([]);
 
         const bodies = Matter.Composite.allBodies(engine.world);
@@ -393,70 +355,42 @@ export default function Game() {
           if (body.label.startsWith('fruit_')) {
             const level = parseInt(body.label.split('_')[1], 10);
             const radius = FRUIT_LEVELS[level].radius;
-            
             ctx.save();
             ctx.translate(body.position.x, body.position.y);
             ctx.rotate(body.angle);
-            
             if (loadedTextures[level]) {
               ctx.drawImage(loadedTextures[level], -radius, -radius, radius * 2, radius * 2);
             } else {
-              ctx.beginPath();
-              ctx.arc(0, 0, radius, 0, Math.PI * 2);
-              ctx.fillStyle = FRUIT_LEVELS[level].color;
-              ctx.fill();
+              ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fillStyle = FRUIT_LEVELS[level].color; ctx.fill();
             }
             ctx.restore();
 
             if (body.position.y - radius < GAME_OVER_Y && body.velocity.y < 0.1 && body.velocity.y > -0.1) {
-              if (Date.now() - (body as any).spawnTime > 2000) {
-                gameOverTriggered = true;
-              }
+              if (Date.now() - (body as any).spawnTime > 2000) gameOverTriggered = true;
             }
-          } else if (!body.isStatic) {
-             // Draw walls/ground if needed, but they are usually invisible or handled by background
           }
         });
 
-        if (gameOverTriggered) {
-          setIsGameOver(true);
-          setIsStarted(false);
-        }
+        if (gameOverTriggered) { setIsGameOver(true); setIsStarted(false); }
 
         if (isStarted && !isGameOver) {
           const type = currentFruitTypeRef.current;
-          const currentConfig = FRUIT_LEVELS[type];
-
-          ctx.save();
-          ctx.setLineDash([8, 8]);
-          ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(inputXRef.current, SPAWN_Y);
-          ctx.lineTo(inputXRef.current, CANVAS_HEIGHT);
-          ctx.stroke();
-          ctx.restore();
-
-          ctx.globalAlpha = 0.6;
-          ctx.save();
-          ctx.translate(inputXRef.current, SPAWN_Y);
+          const config = FRUIT_LEVELS[type];
+          ctx.save(); ctx.setLineDash([8, 8]); ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)'; ctx.beginPath();
+          ctx.moveTo(inputXRef.current, SPAWN_Y); ctx.lineTo(inputXRef.current, CANVAS_HEIGHT); ctx.stroke(); ctx.restore();
+          ctx.globalAlpha = 0.6; ctx.save(); ctx.translate(inputXRef.current, SPAWN_Y);
           if (loadedTextures[type]) {
-            ctx.drawImage(loadedTextures[type], -currentConfig.radius, -currentConfig.radius, currentConfig.radius * 2, currentConfig.radius * 2);
+            ctx.drawImage(loadedTextures[type], -config.radius, -config.radius, config.radius * 2, config.radius * 2);
           } else {
-            ctx.beginPath();
-            ctx.arc(0, 0, currentConfig.radius, 0, Math.PI * 2);
-            ctx.fillStyle = currentConfig.color;
-            ctx.fill();
+            ctx.beginPath(); ctx.arc(0, 0, config.radius, 0, Math.PI * 2); ctx.fillStyle = config.color; ctx.fill();
           }
-          ctx.restore();
-          ctx.globalAlpha = 1.0;
+          ctx.restore(); ctx.globalAlpha = 1.0;
         }
       }
       requestAnimationFrame(loop);
     };
 
     const animFrame = requestAnimationFrame(loop);
-
     return () => {
       Matter.Engine.clear(engine);
       Matter.Render.stop(render);
@@ -469,19 +403,8 @@ export default function Game() {
     if (isGameOver || !isStarted) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    
-    let clientX = 0;
-    if ('touches' in e) {
-      clientX = e.touches[0].clientX;
-    } else {
-      clientX = (e as React.MouseEvent).clientX;
-    }
-
-    const x = clientX - rect.left;
-    // Scale X to canvas coordinate system
-    const scaleX = CANVAS_WIDTH / rect.width;
-    const scaledX = x * scaleX;
-
+    let clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const scaledX = ((clientX - rect.left) / rect.width) * CANVAS_WIDTH;
     const config = FRUIT_LEVELS[currentFruitType];
     inputXRef.current = Math.max(config.radius, Math.min(CANVAS_WIDTH - config.radius, scaledX));
   };
@@ -490,13 +413,12 @@ export default function Game() {
     if (isGameOver || !isStarted) return;
     const now = Date.now();
     if (now - lastSpawnTimeRef.current < 500) return;
-
     const fruit = spawnFruit(currentFruitType, inputXRef.current, SPAWN_Y);
     if (fruit) {
       lastSpawnTimeRef.current = now;
-      const nextType = nextFruitType;
-      setCurrentFruitType(nextType);
-      currentFruitTypeRef.current = nextType;
+      const next = nextFruitType;
+      setCurrentFruitType(next);
+      currentFruitTypeRef.current = next;
       const newNext = Math.floor(Math.random() * 4);
       setNextFruitType(newNext);
       nextFruitTypeRef.current = newNext;
@@ -506,46 +428,14 @@ export default function Game() {
   return (
     <div ref={containerRef} className="w-full max-w-[400px] h-[100dvh] flex flex-col bg-[#fdfaf3] select-none touch-none font-sans overflow-hidden mx-auto p-2">
       <div className="flex flex-col w-full h-full">
-        {/* UI Header */}
-        <div className="w-full max-w-[400px] flex justify-between items-end mb-1 px-2 shrink-0">
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Score</span>
-            <span className="text-3xl font-bold text-slate-800 tabular-nums leading-none">{score}</span>
-          </div>
-          <div className="flex items-center gap-4">
-             <div className="flex flex-col items-center bg-white/50 p-1 rounded-xl border border-slate-200 min-w-[56px]">
-               <span className="text-[9px] uppercase tracking-tighter text-slate-400 mb-0.5">Next</span>
-               <div className="relative w-8 h-8 flex items-center justify-center">
-                 {loadedTextures[nextFruitType] ? (
-                   <img 
-                     src={loadedTextures[nextFruitType].toDataURL()} 
-                     alt="Next fruit" 
-                     className="w-6 h-6 object-contain"
-                   />
-                 ) : (
-                   <div 
-                     className="w-6 h-6 rounded-full flex items-center justify-center text-sm shadow-sm" 
-                     style={{ 
-                       backgroundColor: FRUIT_LEVELS[nextFruitType].color,
-                       border: `2px solid ${shadeColor(FRUIT_LEVELS[nextFruitType].color, -20)}`
-                     }}
-                   >
-                     {FRUIT_LEVELS[nextFruitType].icon}
-                   </div>
-                 )}
-               </div>
-             </div>
-             <div className="flex flex-col items-end">
-                <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-[#d4af37] font-semibold">
-                  <Trophy size={10} strokeWidth={3} />
-                  Best
-                </div>
-                <span className="text-xl font-bold text-slate-600 tabular-nums leading-none">{bestScore}</span>
-              </div>
-          </div>
+        <Scoreboard score={score} bestScore={bestScore} />
+        
+        <div className="w-full flex justify-between items-center px-2 mb-1 shrink-0">
+           <NextFruitIndicator nextType={nextFruitType} loadedTextures={loadedTextures} />
+           {/* Space for potential other UI elements */}
+           <div className="w-16" /> 
         </div>
 
-         {/* Game Canvas Container */}
          <div className="flex-1 w-full min-h-0 flex items-center justify-center overflow-hidden">
            <div className="relative aspect-[400/600] max-h-full max-w-full bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b]">
              <canvas
@@ -559,13 +449,9 @@ export default function Game() {
            </div>
          </div>
 
-        {/* Start Overlay */}
         {!isStarted && !isGameOver && (
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-8 text-center z-50">
-            <button 
-              onClick={startNewGame}
-              className="group flex flex-col items-center bg-white text-slate-900 px-8 py-6 rounded-3xl shadow-xl transform transition-all active:scale-95 hover:scale-105"
-            >
+            <button onClick={startNewGame} className="group flex flex-col items-center bg-white text-slate-900 px-8 py-6 rounded-3xl shadow-xl transform transition-all active:scale-95 hover:scale-105">
               <div className="w-16 h-16 bg-[#ff6b6b] rounded-full flex items-center justify-center text-white mb-4 shadow-lg group-hover:bg-[#ff5252]">
                 <Play fill="currentColor" size={32} className="ml-1" />
               </div>
@@ -575,52 +461,18 @@ export default function Game() {
           </div>
         )}
 
-        {/* Game Over Overlay */}
         {isGameOver && (
           <div className="absolute inset-0 bg-[#ff6b6b]/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center text-white z-50">
             <span className="text-5xl font-black mb-2 uppercase tracking-tight">Game Over</span>
             <span className="text-lg opacity-80 mb-8 font-medium">Final Score: {score}</span>
-            <button 
-              onClick={startNewGame}
-              className="flex items-center gap-3 bg-white text-[#ff6b6b] px-8 py-4 rounded-full font-bold shadow-2xl hover:bg-slate-50 transition-colors active:scale-95"
-            >
+            <button onClick={startNewGame} className="flex items-center gap-3 bg-white text-[#ff6b6b] px-8 py-4 rounded-full font-bold shadow-2xl hover:bg-slate-50 transition-colors active:scale-95">
               <RefreshCw size={24} />
               Try Again
             </button>
           </div>
         )}
-      </div>
 
-      {/* Evolution Info (Bottom Bar) */}
-      <div className="w-full max-w-[400px] mt-1 overflow-x-auto no-scrollbar py-1 shrink-0">
-        <div className="flex gap-4 px-4 min-w-max items-center">
-          {FRUIT_LEVELS.slice(0, 11).map((fruit, i) => (
-            <div key={i} className={cn("flex flex-col items-center opacity-40 transition-opacity", score > 0 && "opacity-100")}>
-              <div 
-                className="rounded-full shadow-sm flex items-center justify-center overflow-hidden border border-black/5" 
-                style={{ 
-                  backgroundColor: fruit.color, 
-                  width: 16 + i*2.5, 
-                  height: 16 + i*2.5 
-                }}
-              >
-                {loadedTextures[i] ? (
-                  <img 
-                    src={loadedTextures[i].toDataURL()} 
-                    className="w-full h-full object-cover" 
-                    alt={fruit.name}
-                  />
-                ) : (
-                  <span style={{ fontSize: `${10 + i * 0.5}px` }}>{fruit.icon}</span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-      
-      <div className="mt-1 text-[9px] text-slate-400 font-medium uppercase tracking-[0.2em] text-center pb-1 shrink-0">
-        Fai cadere la frutta • Non superare la linea rossa
+        <EvolutionBar score={score} />
       </div>
     </div>
   );
