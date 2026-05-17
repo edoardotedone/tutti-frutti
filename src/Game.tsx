@@ -533,11 +533,11 @@ export default function Game() {
         </div>
 
          {/* Game Canvas Container */}
-         <div className="flex-1 w-full relative my-4 min-h-0">
-           <div className="absolute inset-0 bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b]">
+         <div className="flex-1 w-full relative my-4 min-h-0 flex items-end justify-center">
+           <div className="relative aspect-[400/600] w-full max-w-[400px] bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b]">
              <canvas
                ref={canvasRef}
-               className="w-full h-full object-contain bg-transparent block"
+               className="w-full h-full block"
                onMouseMove={onInteractionMove}
                onMouseUp={onInteractionEnd}
                onTouchMove={onInteractionMove}
