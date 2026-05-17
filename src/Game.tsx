@@ -529,7 +529,7 @@ export default function Game() {
   return (
     <div ref={containerRef} className="flex flex-col items-center justify-center min-h-screen bg-[#fdfaf3] p-4 select-none touch-none font-sans overflow-hidden">
       {/* Responsive Container */}
-      <div className="flex flex-col items-center w-full max-w-[400px] h-[85dvh] max-h-[85dvh]">
+      <div className="flex flex-col items-center w-full max-w-[400px] max-h-[85dvh] aspect-[4/6]">
         {/* UI Header */}
         <div className="w-full max-w-[400px] flex justify-between items-end mb-4 px-2">
         <div className="flex flex-col">
@@ -571,7 +571,7 @@ export default function Game() {
       </div>
 
        {/* Game Canvas Container */}
-       <div className="relative w-full h-full bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b] aspect-[4/6]">
+       <div className="relative w-full h-full bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b]">
          <canvas
            ref={canvasRef}
            className="w-full h-full bg-transparent block"
