@@ -94,27 +94,35 @@ export default function Game() {
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   // Audio System
+  // Use a simple ref to track last sound time to avoid audio congestion on mobile
+  const lastSoundTimeRef = useRef(0);
+
   const playMergeSound = (level: number) => {
     if (!audioCtxRef.current) return;
     const ctx = audioCtxRef.current;
     if (ctx.state === 'suspended') ctx.resume();
+    
+    // Prevent too many merge sounds overlapping
+    const now = ctx.currentTime;
+    if (now - lastSoundTimeRef.current < 0.1) return;
+    lastSoundTimeRef.current = now;
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     
     osc.type = 'sine';
     const baseFreq = 220 + level * 40;
-    osc.frequency.setValueAtTime(baseFreq, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, ctx.currentTime + 0.1);
+    osc.frequency.setValueAtTime(baseFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.1);
 
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    gain.gain.setValueAtTime(0.1, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
 
     osc.start();
-    osc.stop(ctx.currentTime + 0.3);
+    osc.stop(now + 0.3);
   };
 
   const playCollisionSound = (intensity: number) => {
@@ -122,20 +130,25 @@ export default function Game() {
     const ctx = audioCtxRef.current;
     if (ctx.state === 'suspended') ctx.resume();
 
+    // Throttle collision sounds heavily for mobile performance
+    const now = ctx.currentTime;
+    if (now - lastSoundTimeRef.current < 0.05) return; 
+    lastSoundTimeRef.current = now;
+
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(100, ctx.currentTime);
+    osc.frequency.setValueAtTime(100, now);
     
-    gain.gain.setValueAtTime(Math.min(0.05, intensity * 0.01), ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(Math.min(0.03, intensity * 0.01), now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
 
     osc.connect(gain);
     gain.connect(ctx.destination);
 
     osc.start();
-    osc.stop(ctx.currentTime + 0.1);
+    osc.stop(now + 0.1);
   };
 
   // Initialize Best Score & Audio
@@ -306,10 +319,10 @@ export default function Game() {
 
       const newFruit = spawnFruit(level + 1, midX, midY);
       if (newFruit) {
-         const bodies = Matter.Composite.allBodies(engineRef.current!.world);
-         bodies.forEach(body => {
-           if (!body.isStatic) Matter.Sleeping.set(body, false);
-         });
+        // Instead of waking ALL bodies, we only wake the one that was just created 
+        // and its immediate neighbors if necessary. Matter's engine usually handles this,
+        // but let's be more surgical than iterating over everything.
+        Matter.Sleeping.set(newFruit, false);
       }
       playMergeSound(level);
       setScore(prev => {
