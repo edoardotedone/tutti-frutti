@@ -491,7 +491,7 @@ export default function Game() {
   };
 
   return (
-    <div ref={containerRef} className="w-full max-w-[400px] h-[100dvh] flex flex-col bg-[#fdfaf3] select-none touch-none font-sans overflow-hidden mx-auto">
+    <div ref={containerRef} className="w-full max-w-[400px] h-[100dvh] flex flex-col bg-[#fdfaf3] select-none touch-none font-sans overflow-hidden mx-auto p-2">
       <div className="flex flex-col w-full h-full">
         {/* UI Header */}
         <div className="w-full max-w-[400px] flex justify-between items-end mb-1 px-2 shrink-0">
@@ -500,18 +500,18 @@ export default function Game() {
             <span className="text-3xl font-bold text-slate-800 tabular-nums leading-none">{score}</span>
           </div>
           <div className="flex items-center gap-4">
-             <div className="flex flex-col items-center bg-white/50 p-2 rounded-2xl border border-slate-200 min-w-16">
-               <span className="text-[10px] uppercase tracking-tighter text-slate-400 mb-1">Next</span>
-               <div className="relative w-10 h-10 flex items-center justify-center">
+             <div className="flex flex-col items-center bg-white/50 p-1 rounded-xl border border-slate-200 min-w-[56px]">
+               <span className="text-[9px] uppercase tracking-tighter text-slate-400 mb-0.5">Next</span>
+               <div className="relative w-8 h-8 flex items-center justify-center">
                  {loadedTextures[nextFruitType] ? (
                    <img 
                      src={loadedTextures[nextFruitType].toDataURL()} 
                      alt="Next fruit" 
-                     className="w-8 h-8 object-contain"
+                     className="w-6 h-6 object-contain"
                    />
                  ) : (
                    <div 
-                     className="w-8 h-8 rounded-full flex items-center justify-center text-lg shadow-sm" 
+                     className="w-6 h-6 rounded-full flex items-center justify-center text-sm shadow-sm" 
                      style={{ 
                        backgroundColor: FRUIT_LEVELS[nextFruitType].color,
                        border: `2px solid ${shadeColor(FRUIT_LEVELS[nextFruitType].color, -20)}`
@@ -523,21 +523,21 @@ export default function Game() {
                </div>
              </div>
              <div className="flex flex-col items-end">
-                <div className="flex items-center gap-1 text-xs uppercase tracking-widest text-[#d4af37] font-semibold">
-                  <Trophy size={12} strokeWidth={3} />
+                <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-[#d4af37] font-semibold">
+                  <Trophy size={10} strokeWidth={3} />
                   Best
                 </div>
-                <span className="text-2xl font-bold text-slate-600 tabular-nums leading-none">{bestScore}</span>
+                <span className="text-xl font-bold text-slate-600 tabular-nums leading-none">{bestScore}</span>
               </div>
           </div>
         </div>
 
          {/* Game Canvas Container */}
-         <div className="flex-1 w-full relative min-h-0 flex items-end justify-center overflow-hidden">
-           <div className="relative aspect-[400/600] h-full max-h-full w-auto max-w-full bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b]">
+         <div className="flex-1 w-full min-h-0 flex items-center justify-center overflow-hidden">
+           <div className="relative aspect-[400/600] max-h-full max-w-full bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b]">
              <canvas
                ref={canvasRef}
-               className="w-full h-full block"
+               className="w-full h-full object-contain block"
                onMouseMove={onInteractionMove}
                onMouseUp={onInteractionEnd}
                onTouchMove={onInteractionMove}
@@ -606,7 +606,7 @@ export default function Game() {
         </div>
       </div>
       
-      <div className="mt-4 text-[10px] text-slate-400 font-medium uppercase tracking-[0.2em] text-center pb-4 shrink-0">
+      <div className="mt-1 text-[9px] text-slate-400 font-medium uppercase tracking-[0.2em] text-center pb-1 shrink-0">
         Fai cadere la frutta • Non superare la linea rossa
       </div>
     </div>
