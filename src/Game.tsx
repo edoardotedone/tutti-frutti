@@ -386,17 +386,26 @@ export default function Game({ loadedTextures }: GameProps) {
         const bodies = Matter.Composite.allBodies(engine.world);
         let gameOverTriggered = false;
 
-        bodies.forEach(body => {
+        bodies.forEach((body: Matter.Body) => {
           if (body.label.startsWith('fruit_')) {
             const level = parseInt(body.label.split('_')[1], 10);
             const radius = FRUIT_LEVELS[level].radius;
             ctx.save();
             ctx.translate(body.position.x, body.position.y);
             ctx.rotate(body.angle);
+
             if (loadedTextures[level]) {
+              // Draw circular clip for the image
+              ctx.beginPath();
+              ctx.arc(0, 0, radius, 0, Math.PI * 2);
+              ctx.clip();
               ctx.drawImage(loadedTextures[level], -radius, -radius, radius * 2, radius * 2);
             } else {
-              ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fillStyle = FRUIT_LEVELS[level].color; ctx.fill();
+              // Fallback to a simple colored circle
+              ctx.beginPath();
+              ctx.arc(0, 0, radius, 0, Math.PI * 2);
+              ctx.fillStyle = FRUIT_LEVELS[level].color;
+              ctx.fill();
             }
             ctx.restore();
 
