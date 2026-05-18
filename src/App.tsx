@@ -1,21 +1,6 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import Game from './Game';
-
-// --- Constants (Matching Game.tsx for consistency) ---
-const FRUIT_LEVELS = [
-  { level: 0, url: './assets/fruit_0.png' },
-  { level: 1, url: './assets/fruit_1.png' },
-  { level: 2, url: './assets/fruit_2.png' },
-  { level: 3, url: './assets/fruit_3.png' },
-  { level: 4, url: './assets/fruit_4.png' },
-  { level: 5, url: './assets/fruit_5.png' },
-  { level: 6, url: './assets/fruit_6.png' },
-  { level: 7, url: './assets/fruit_7.png' },
-  { level: 8, url: './assets/fruit_8.png' },
-  { level: 9, url: './assets/fruit_9.png' },
-  { level: 10, url: './assets/fruit_10.png' },
-  { level: 11, url: './assets/fruit_11.png' },
-];
+import { FRUIT_LEVELS } from './constants';
 
 export default function App() {
   const [loadedTextures, setLoadedTextures] = useState<Record<number, HTMLCanvasElement> | null>(null);
@@ -41,14 +26,26 @@ export default function App() {
                 reject(new Error(`Could not get context for fruit ${fruit.level}`));
               }
             };
-            img.onerror = () => reject(new Error(`Failed to load image: ${fruit.url}`));
+            // Instead of rejecting on error (which would fail the whole Promise.all), 
+            // we resolve with null or just don't include it if we want to handle missing textures gracefully in App.tsx
+            // But since we want textureMap[level] to exist or be handled, let's resolve with a flag or just catch error per promise.
+            img.onerror = () => {
+              console.warn(`Failed to load image: ${fruit.url}. Texture will be missing for level ${fruit.level}`);
+              // Resolve with an empty canvas or something that indicates failure if we want to keep the array length consistent, 
+              // but actually it's better to just resolve with a special value or handle it in results.
+              // Let's use a hack: resolve with a dummy that isn't a valid texture but doesn't crash.
+              // Actually, let's just resolve with [fruit.level, null as any] so we can filter later.
+              resolve([fruit.level, null as any]);
+            };
           });
         });
 
         const results = await Promise.all(texturePromises);
         const textureMap: Record<number, HTMLCanvasElement> = {};
         results.forEach(([level, canvas]) => {
-          textureMap[level] = canvas;
+          if (canvas) {
+            textureMap[level] = canvas;
+          }
         });
 
         setLoadedTextures(textureMap);

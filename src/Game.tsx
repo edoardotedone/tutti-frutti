@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useRef, useState, memo, useMemo } from 'react';
+import React, { useEffect, useRef, useState, memo } from 'react';
 import Matter from 'matter-js';
 import { Trophy, RefreshCw, Play } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { FRUIT_LEVELS, CANVAS_WIDTH, CANVAS_HEIGHT, GAME_OVER_Y, SPAWN_Y, type FruitLevel } from './constants';
 
 // --- Utilities ---
 function cn(...inputs: ClassValue[]) {
@@ -33,42 +34,6 @@ function shadeColor(color: string, percent: number) {
 
   return '#' + RR + GG + BB;
 }
-
-// --- Constants ---
-const CANVAS_WIDTH = 400;
-const CANVAS_HEIGHT = 600;
-const GAME_OVER_Y = 120;
-const SPAWN_Y = 60;
-
-const FRUIT_LEVELS = [
-  { level: 0, radius: 15, color: '#ff4d4d', name: 'Cherry', score: 2, icon: '🍒' },
-  { level: 1, radius: 22, color: '#ffb3b3', name: 'Strawberry', score: 4, icon: '🍓' },
-  { level: 2, radius: 32, color: '#9933ff', name: 'Grape', score: 6, icon: '🍇' },
-  { level: 3, radius: 40, color: '#ffcc00', name: 'Dekopon', score: 10, icon: '🍊' },
-  { level: 4, radius: 52, color: '#ffa31a', name: 'Orange', score: 15, icon: '🍊' },
-  { level: 5, radius: 64, color: '#ff3333', name: 'Apple', score: 21, icon: '🍎' },
-  { level: 6, radius: 78, color: '#ffff33', name: 'Pear', score: 28, icon: '🍐' },
-  { level: 7, radius: 92, color: '#ff99ff', name: 'Peach', score: 36, icon: '🍑' },
-  { level: 8, radius: 105, color: '#99ff33', name: 'Pineapple', score: 45, icon: '🍍' },
-  { level: 9, radius: 120, color: '#33cc33', name: 'Melon', score: 55, icon: '🍈' },
-  { level: 10, radius: 138, color: '#006600', name: 'Watermelon', score: 66, icon: '🍉' },
-  { level: 11, radius: 155, color: '#ff0000', name: 'King Suika', score: 100, icon: '👑' },
-];
-
-const ASSET_MAPPING: Record<number, string> = {
-  0: './assets/fruit_0.png',
-  1: './assets/fruit_1.png',
-  2: './assets/fruit_2.png',
-  3: './assets/fruit_3.png',
-  4: './assets/fruit_4.png',
-  5: './assets/fruit_5.png',
-  6: './assets/fruit_6.png',
-  7: './assets/fruit_7.png',
-  8: './assets/fruit_8.png',
-  9: './assets/fruit_9.png',
-  10: './assets/fruit_10.png',
-  11: './assets/fruit_11.png',
-};
 
 // --- Sub-components ---
 
@@ -104,14 +69,12 @@ const NextFruitIndicator = memo(({ nextType, loadedTextures }: { nextType: numbe
     canvas.width = size;
     canvas.height = size;
 
-    // Draw circular clip
     ctx.clearRect(0, 0, size, size);
     ctx.save();
     ctx.beginPath();
     ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
     ctx.clip();
     
-    // Draw texture centered and scaled
     const scale = size / Math.max(texture.width, texture.height);
     const w = texture.width * scale;
     const h = texture.height * scale;
@@ -145,28 +108,33 @@ const EvolutionBar = memo(({ score, loadedTextures }: { score: number; loadedTex
   return (
     <div className="w-full max-w-[400px] mt-1 overflow-x-auto no-scrollbar py-1 shrink-0">
       <div className="flex gap-4 px-4 min-w-max items-center">
-        {FRUIT_LEVELS.slice(0, 11).map((fruit, i) => (
-          <div key={i} className={cn("flex flex-col items-center opacity-40 transition-opacity", score > 0 && "opacity-100")}>
-            <div 
-              className="rounded-full shadow-sm flex items-center justify-center overflow-hidden border border-black/5 relative" 
-              style={{ 
-                backgroundColor: fruit.color, 
-                width: 16 + i*2.5, 
-                height: 16 + i*2.5 
-              }}
-            >
-               {loadedTextures[i] ? (
-                 <img 
-                   src={loadedTextures[i].toDataURL()} 
-                   className="w-full h-full object-cover"
-                   alt=""
-                 />
-               ) : (
-                 <span style={{ fontSize: `${10 + i * 0.5}px` }}>{fruit.icon}</span>
-               )}
-            </div>
-          </div>
-        ))}
+        {FRUIT_LEVELS.map((fruit) => {
+          const isKingSuika = fruit.level === FRUIT_LEVELS.length - 1;
+          return (
+            <div key={fruit.level} className={cn("flex flex-col items-center opacity-40 transition-opacity", score > 0 && "opacity-100")}>
+              <div 
+                className="rounded-full shadow-sm flex items-center justify-center overflow-hidden border border-black/5 relative" 
+                style={{ 
+                  backgroundColor: fruit.color, 
+                  width: 16 + fruit.level*2.5, 
+                  height: 16 + fruit.level*2.5 
+                }}
+              >
+                 {isKingSuika ? (
+                   <span className="text-white font-bold" style={{ fontSize: `${10 + fruit.level * 0.5}px` }}>?</span>
+                 ) : loadedTextures[fruit.level] ? (
+                  <img 
+                    src={loadedTextures[fruit.level].toDataURL()} 
+                    className="w-full h-full object-cover"
+                    alt=""
+                  />
+                ) : (
+                  <span style={{ fontSize: `${10 + fruit.level * 0.5}px` }}>{fruit.icon}</span>
+                )}
+               </div>
+             </div>
+           );
+        })}
       </div>
     </div>
   );
@@ -180,6 +148,22 @@ interface GameProps {
 
 export default function Game({ loadedTextures }: GameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const [gameId, setGameId] = useState(0);
+
+  return (
+    <div ref={containerRef} key={gameId} className="w-full max-w-[400px] h-[100dvh] flex flex-col bg-[#fdfaf3] select-none touch-none font-sans overflow-hidden mx-auto p-2">
+      <GameContent loadedTextures={loadedTextures} setGameId={setGameId} gameId={gameId} />
+    </div >
+  );
+}
+
+interface GameContentProps {
+  loadedTextures: Record<number, HTMLCanvasElement>;
+  setGameId: React.Dispatch<React.SetStateAction<number>>;
+  gameId: number;
+}
+
+function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine | null>(null);
   const renderRef = useRef<Matter.Render | null>(null);
@@ -318,7 +302,7 @@ export default function Game({ loadedTextures }: GameProps) {
       if (newFruit) Matter.Sleeping.set(newFruit, false);
       
       playMergeSound(level);
-      setScore(prev => {
+      setScore((prev: number) => {
         const newScore = prev + FRUIT_LEVELS[level].score;
         if (newScore > bestScore) {
           setBestScore(newScore);
@@ -330,6 +314,10 @@ export default function Game({ loadedTextures }: GameProps) {
   };
 
   const startNewGame = () => {
+    setGameId(prev => prev + 1);
+  };
+
+  useEffect(() => {
     setIsGameOver(false);
     setScore(0);
     setIsStarted(true);
@@ -339,12 +327,7 @@ export default function Game({ loadedTextures }: GameProps) {
     setNextFruitType(nextFruit);
     currentFruitTypeRef.current = initialFruit;
     nextFruitTypeRef.current = nextFruit;
-
-    if (engineRef.current) {
-      Matter.World.clear(engineRef.current.world, false);
-      createWalls();
-    }
-  };
+  }, [gameId]);
 
   useEffect(() => {
     const engine = Matter.Engine.create({ enableSleeping: true });
@@ -361,22 +344,27 @@ export default function Game({ loadedTextures }: GameProps) {
 
     createWalls();
 
-    Matter.Events.on(engine, 'collisionStart', (event) => {
-      event.pairs.forEach(pair => {
-        handleMerge(pair);
+    Matter.Events.on(engine, 'collisionStart', (event: Matter.Events.CollisionStartEvent) => {
+      event.pairs.forEach((pair: Matter.IPair) => {
         playCollisionSound(pair.collision.speed);
+      });
+    });
+
+    Matter.Events.on(engine, 'afterUpdate', () => {
+      const pairs = engine.pairs.list;
+      pairs.forEach((pair: Matter.IPair) => {
+        handleMerge(pair);
       });
     });
 
     Matter.Runner.run(runner, engine);
 
     const loop = () => {
-      if (isGameOver) return;
+      if (isGameOver || gameId === undefined) return;
       const ctx = canvasRef.current?.getContext('2d');
       if (ctx && engine.world.bodies.length > 0) {
         ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        // Draw Dead Line
         ctx.setLineDash([5, 5]);
         ctx.strokeStyle = '#ff4444';
         ctx.lineWidth = 2;
@@ -395,13 +383,11 @@ export default function Game({ loadedTextures }: GameProps) {
             ctx.rotate(body.angle);
 
             if (loadedTextures[level]) {
-              // Draw circular clip for the image
               ctx.beginPath();
               ctx.arc(0, 0, radius, 0, Math.PI * 2);
               ctx.clip();
               ctx.drawImage(loadedTextures[level], -radius, -radius, radius * 2, radius * 2);
             } else {
-              // Fallback to a simple colored circle
               ctx.beginPath();
               ctx.arc(0, 0, radius, 0, Math.PI * 2);
               ctx.fillStyle = FRUIT_LEVELS[level].color;
@@ -424,7 +410,6 @@ export default function Game({ loadedTextures }: GameProps) {
           ctx.moveTo(inputXRef.current, SPAWN_Y); ctx.lineTo(inputXRef.current, CANVAS_HEIGHT); ctx.stroke(); ctx.restore();
           ctx.globalAlpha = 0.6; ctx.save(); ctx.translate(inputXRef.current, SPAWN_Y);
 
-          // Clipping for preview fruit
           ctx.beginPath();
           ctx.arc(0, 0, config.radius, 0, Math.PI * 2);
           ctx.clip();
@@ -447,7 +432,7 @@ export default function Game({ loadedTextures }: GameProps) {
       Matter.Runner.stop(runner);
       cancelAnimationFrame(animFrame);
     };
-  }, [loadedTextures, isStarted, isGameOver]);
+  }, [loadedTextures, isStarted, isGameOver, gameId]);
 
   const onInteractionMove = (e: React.MouseEvent | React.TouchEvent) => {
     if (isGameOver || !isStarted) return;
@@ -476,54 +461,51 @@ export default function Game({ loadedTextures }: GameProps) {
   };
 
   return (
-    <div ref={containerRef} className="w-full max-w-[400px] h-[100dvh] flex flex-col bg-[#fdfaf3] select-none touch-none font-sans overflow-hidden mx-auto p-2">
-      <div className="flex flex-col w-full h-full">
-        <Scoreboard score={score} bestScore={bestScore} />
-        
-        <div className="w-full flex justify-between items-center px-2 mb-1 shrink-0">
-           <NextFruitIndicator nextType={nextFruitType} loadedTextures={loadedTextures} />
-           {/* Space for potential other UI elements */}
-           <div className="w-16" /> 
-        </div>
-
-         <div className="flex-1 w-full min-h-0 flex items-center justify-center overflow-hidden">
-           <div className="relative aspect-[400/600] max-h-full max-w-full bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b]">
-             <canvas
-               ref={canvasRef}
-               className="w-full h-full object-contain block"
-               onMouseMove={onInteractionMove}
-               onMouseUp={onInteractionEnd}
-               onTouchMove={onInteractionMove}
-               onTouchEnd={onInteractionEnd}
-             />
-           </div>
-         </div>
-
-        {!isStarted && !isGameOver && (
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-8 text-center z-50">
-            <button onClick={startNewGame} className="group flex flex-col items-center bg-white text-slate-900 px-8 py-6 rounded-3xl shadow-xl transform transition-all active:scale-95 hover:scale-105">
-              <div className="w-16 h-16 bg-[#ff6b6b] rounded-full flex items-center justify-center text-white mb-4 shadow-lg group-hover:bg-[#ff5252]">
-                <Play fill="currentColor" size={32} className="ml-1" />
-              </div>
-              <span className="text-2xl font-bold">Uniscile Tutte</span>
-              <span className="text-sm text-slate-500 mt-1 uppercase tracking-widest">Tutti Frutti</span>
-            </button>
-          </div>
-        )}
-
-        {isGameOver && (
-          <div className="absolute inset-0 bg-[#ff6b6b]/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center text-white z-50">
-            <span className="text-5xl font-black mb-2 uppercase tracking-tight">Game Over</span>
-            <span className="text-lg opacity-80 mb-8 font-medium">Final Score: {score}</span>
-            <button onClick={startNewGame} className="flex items-center gap-3 bg-white text-[#ff6b6b] px-8 py-4 rounded-full font-bold shadow-2xl hover:bg-slate-50 transition-colors active:scale-95">
-              <RefreshCw size={24} />
-              Try Again
-            </button>
-          </div>
-        )}
-
-        <EvolutionBar score={score} loadedTextures={loadedTextures} />
+    <div className="flex flex-col w-full h-full">
+      <Scoreboard score={score} bestScore={bestScore} />
+      
+      <div className="w-full flex justify-between items-center px-2 mb-1 shrink-0">
+         <NextFruitIndicator nextType={nextFruitType} loadedTextures={loadedTextures} />
+         <div className="w-16" /> 
       </div>
+
+       <div className="flex-1 w-full min-h-0 flex items-center justify-center overflow-hidden">
+         <div className="relative aspect-[400/600] max-h-full max-w-full bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b]">
+           <canvas
+             ref={canvasRef}
+             className="w-full h-full object-contain block"
+             onMouseMove={onInteractionMove}
+             onMouseUp={onInteractionEnd}
+             onTouchMove={onInteractionMove}
+             onTouchEnd={onInteractionEnd}
+           />
+         </div>
+       </div>
+
+      {!isStarted && !isGameOver && (
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-8 text-center z-50">
+          <button onClick={startNewGame} className="group flex flex-col items-center bg-white text-slate-900 px-8 py-6 rounded-3xl shadow-xl transform transition-all active:scale-95 hover:scale-105">
+            <div className="w-16 h-16 bg-[#ff6b6b] rounded-full flex items-center justify-center text-white mb-4 shadow-lg group-hover:bg-[#ff5252]">
+              <Play fill="currentColor" size={32} className="ml-1" />
+            </div>
+            <span className="text-2xl font-bold">Uniscile Tutte</span>
+            <span className="text-sm text-slate-500 mt-1 uppercase tracking-widest">Tutti Frutti</span>
+          </button>
+        </div>
+      )}
+
+      {isGameOver && (
+        <div className="absolute inset-0 bg-[#ff6b6b]/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center text-white z-50">
+          <span className="text-5xl font-black mb-2 uppercase tracking-tight">Game Over</span>
+          <span className="text-lg opacity-80 mb-8 font-medium">Final Score: {score}</span>
+          <button onClick={startNewGame} className="flex items-center gap-3 bg-white text-[#ff6b6b] px-8 py-4 rounded-full font-bold shadow-2xl hover:bg-slate-50 transition-colors active:scale-95">
+            <RefreshCw size={24} />
+            Try Again
+          </button>
+        </div>
+      )}
+
+      <EvolutionBar score={score} loadedTextures={loadedTextures} />
     </div>
   );
 }
