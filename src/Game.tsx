@@ -90,52 +90,87 @@ const Scoreboard = memo(({ score, bestScore }: { score: number; bestScore: numbe
   </div>
 ));
 
-const NextFruitIndicator = memo(({ nextType, loadedTextures }: { nextType: number; loadedTextures: Record<number, HTMLCanvasElement> }) => (
-  <div className="flex flex-col items-center bg-white/50 p-1 rounded-xl border border-slate-200 min-w-[56px]">
-    <span className="text-[9px] uppercase tracking-tighter text-slate-400 mb-0.5">Next</span>
-    <div className="relative w-8 h-8 flex items-center justify-center">
-      {loadedTextures[nextType] ? (
-        <img 
-          src={loadedTextures[nextType].toDataURL()} 
-          alt="Next fruit" 
-          className="w-6 h-6 object-contain"
-        />
-      ) : (
-        <div 
-          className="w-6 h-6 rounded-full flex items-center justify-center text-sm shadow-sm" 
-          style={{ 
-            backgroundColor: FRUIT_LEVELS[nextType].color,
-            border: `2px solid ${shadeColor(FRUIT_LEVELS[nextType].color, -20)}`
-          }}
-        >
-          {FRUIT_LEVELS[nextType].icon}
-        </div>
-      )}
-    </div>
-  </div>
-));
+const NextFruitIndicator = memo(({ nextType, loadedTextures }: { nextType: number; loadedTextures: Record<number, HTMLCanvasElement> }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-const EvolutionBar = memo(({ score }: { score: number }) => (
-  <div className="w-full max-w-[400px] mt-1 overflow-x-auto no-scrollbar py-1 shrink-0">
-    <div className="flex gap-4 px-4 min-w-max items-center">
-      {FRUIT_LEVELS.slice(0, 11).map((fruit, i) => (
-        <div key={i} className={cn("flex flex-col items-center opacity-40 transition-opacity", score > 0 && "opacity-100")}>
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !loadedTextures[nextType]) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const texture = loadedTextures[nextType];
+    const size = 32;
+    canvas.width = size;
+    canvas.height = size;
+
+    // Draw circular clip
+    ctx.clearRect(0, 0, size, size);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+    ctx.clip();
+    
+    // Draw texture centered and scaled
+    const scale = size / Math.max(texture.width, texture.height);
+    const w = texture.width * scale;
+    const h = texture.height * scale;
+    ctx.drawImage(texture, (size - w) / 2, (size - h) / 2, w, h);
+    ctx.restore();
+  }, [nextType, loadedTextures]);
+
+  return (
+    <div className="flex flex-col items-center bg-white/50 p-1 rounded-xl border border-slate-200 min-w-[56px]">
+      <span className="text-[9px] uppercase tracking-tighter text-slate-400 mb-0.5">Next</span>
+      <div className="relative w-8 h-8 flex items-center justify-center">
+        {loadedTextures[nextType] ? (
+          <canvas ref={canvasRef} className="w-6 h-6" />
+        ) : (
           <div 
-            className="rounded-full shadow-sm flex items-center justify-center overflow-hidden border border-black/5" 
+            className="w-6 h-6 rounded-full flex items-center justify-center text-sm shadow-sm" 
             style={{ 
-              backgroundColor: fruit.color, 
-              width: 16 + i*2.5, 
-              height: 16 + i*2.5 
+              backgroundColor: FRUIT_LEVELS[nextType].color,
+              border: `2px solid ${shadeColor(FRUIT_LEVELS[nextType].color, -20)}`
             }}
           >
-            {/* Note: textures are passed via props to the parent which we'll handle in Game */}
-             <span style={{ fontSize: `${10 + i * 0.5}px` }}>{fruit.icon}</span>
+            {FRUIT_LEVELS[nextType].icon}
           </div>
-        </div>
-      ))}
+        )}
+      </div>
     </div>
-  </div>
-));
+  );
+});
+
+const EvolutionBar = memo(({ score, loadedTextures }: { score: number; loadedTextures: Record<number, HTMLCanvasElement> }) => {
+  return (
+    <div className="w-full max-w-[400px] mt-1 overflow-x-auto no-scrollbar py-1 shrink-0">
+      <div className="flex gap-4 px-4 min-w-max items-center">
+        {FRUIT_LEVELS.slice(0, 11).map((fruit, i) => (
+          <div key={i} className={cn("flex flex-col items-center opacity-40 transition-opacity", score > 0 && "opacity-100")}>
+            <div 
+              className="rounded-full shadow-sm flex items-center justify-center overflow-hidden border border-black/5 relative" 
+              style={{ 
+                backgroundColor: fruit.color, 
+                width: 16 + i*2.5, 
+                height: 16 + i*2.5 
+              }}
+            >
+               {loadedTextures[i] ? (
+                 <img 
+                   src={loadedTextures[i].toDataURL()} 
+                   className="w-full h-full object-cover"
+                   alt=""
+                 />
+               ) : (
+                 <span style={{ fontSize: `${10 + i * 0.5}px` }}>{fruit.icon}</span>
+               )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
 
 // --- Main Component ---
 
@@ -379,6 +414,12 @@ export default function Game({ loadedTextures }: GameProps) {
           ctx.save(); ctx.setLineDash([8, 8]); ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)'; ctx.beginPath();
           ctx.moveTo(inputXRef.current, SPAWN_Y); ctx.lineTo(inputXRef.current, CANVAS_HEIGHT); ctx.stroke(); ctx.restore();
           ctx.globalAlpha = 0.6; ctx.save(); ctx.translate(inputXRef.current, SPAWN_Y);
+
+          // Clipping for preview fruit
+          ctx.beginPath();
+          ctx.arc(0, 0, config.radius, 0, Math.PI * 2);
+          ctx.clip();
+
           if (loadedTextures[type]) {
             ctx.drawImage(loadedTextures[type], -config.radius, -config.radius, config.radius * 2, config.radius * 2);
           } else {
