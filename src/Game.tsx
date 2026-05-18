@@ -513,7 +513,7 @@ export default function Game({ loadedTextures }: GameProps) {
           </div>
         )}
 
-        <EvolutionBar score={score} />
+        <EvolutionBar score={score} loadedTextures={loadedTextures} />
       </div>
     </div>
   );
