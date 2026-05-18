@@ -38,19 +38,17 @@ function shadeColor(color: string, percent: number) {
 // --- Sub-components ---
 
 const Scoreboard = memo(({ score, bestScore }: { score: number; bestScore: number }) => (
-  <div className="w-full max-w-[400px] flex justify-between items-end mb-1 px-2 shrink-0">
+  <div className="w-full max-w-[400px] flex justify-between items-baseline px-2 shrink-0">
     <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Score</span>
+      <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold leading-none mb-1">Score</span>
       <span className="text-3xl font-bold text-slate-800 tabular-nums leading-none">{score}</span>
     </div>
-    <div className="flex items-center gap-4">
-      <div className="flex flex-col items-end">
-        <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-[#d4af37] font-semibold">
-          <Trophy size={10} strokeWidth={3} />
-          Best
-        </div>
-        <span className="text-xl font-bold text-slate-600 tabular-nums leading-none">{bestScore}</span>
+    <div className="flex flex-col items-end">
+      <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-[#d4af37] font-semibold leading-none mb-1">
+        <Trophy size={10} strokeWidth={3} />
+        Best
       </div>
+      <span className="text-3xl font-bold text-slate-600 tabular-nums leading-none">{bestScore}</span>
     </div>
   </div>
 ));
@@ -65,42 +63,57 @@ const NextFruitIndicator = memo(({ nextType, loadedTextures }: { nextType: numbe
     if (!ctx) return;
 
     const texture = loadedTextures[nextType];
-    const size = 32;
+    const size = 56;
     canvas.width = size;
     canvas.height = size;
 
     ctx.clearRect(0, 0, size, size);
+    
+    // Draw image with a padding factor to prevent it from touching the canvas edges (clipping)
+    const paddingFactor = 0.9; 
+    const drawSize = size * paddingFactor;
+    const radius = drawSize / 2;
+
     ctx.save();
     ctx.beginPath();
-    ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+    ctx.arc(size / 2, size / 2, radius, 0, Math.PI * 2);
     ctx.clip();
     
-    const scale = size / Math.max(texture.width, texture.height);
+    const scale = drawSize / Math.max(texture.width, texture.height);
     const w = texture.width * scale;
     const h = texture.height * scale;
     ctx.drawImage(texture, (size - w) / 2, (size - h) / 2, w, h);
     ctx.restore();
+
+    // Add color-matched outline at the actual canvas boundary
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, (size / 2) + 0.5, 0, Math.PI * 2);
+    ctx.strokeStyle = FRUIT_LEVELS[nextType].color;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.restore();
   }, [nextType, loadedTextures]);
 
   return (
-    <div className="flex flex-col items-center bg-white/50 p-1 rounded-xl border border-slate-200 min-w-[56px]">
-      <span className="text-[9px] uppercase tracking-tighter text-slate-400 mb-0.5">Next</span>
-      <div className="relative w-8 h-8 flex items-center justify-center">
+    <div className="flex flex-col items-center min-w-[60px]">
+      <span className="text-[10px] uppercase tracking-widest text-slate-400 mb-1 font-semibold">Next</span>
+      <div className="relative w-12 h-12 flex items-center justify-center">
         {loadedTextures[nextType] ? (
-          <canvas ref={canvasRef} className="w-6 h-6" />
+          <canvas ref={canvasRef} className="w-12 h-12" />
         ) : (
           <div 
-            className="w-6 h-6 rounded-full flex items-center justify-center text-sm shadow-sm" 
+            className="w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-sm" 
             style={{ 
               backgroundColor: FRUIT_LEVELS[nextType].color,
-              border: `2px solid ${shadeColor(FRUIT_LEVELS[nextType].color, -20)}`
+              border: `3px solid ${shadeColor(FRUIT_LEVELS[nextType].color, -20)}`
             }}
           >
             {FRUIT_LEVELS[nextType].icon}
-          </div>
+          </div >
         )}
-      </div>
-    </div>
+      </div >
+    </div >
   );
 });
 
@@ -115,13 +128,13 @@ const EvolutionBar = memo(({ score, loadedTextures }: { score: number; loadedTex
               <div 
                 className="rounded-full shadow-sm flex items-center justify-center overflow-hidden border border-black/5 relative" 
                 style={{ 
-                  backgroundColor: fruit.color, 
+                  backgroundColor: isKingSuika ? '#e2e8f0' : fruit.color, 
                   width: 16 + fruit.level*2.5, 
                   height: 16 + fruit.level*2.5 
                 }}
               >
                  {isKingSuika ? (
-                   <span className="text-white font-bold" style={{ fontSize: `${10 + fruit.level * 0.5}px` }}>?</span>
+                   <span className="text-slate-500 font-bold" style={{ fontSize: `${10 + fruit.level * 0.5}px` }}>?</span >
                  ) : loadedTextures[fruit.level] ? (
                   <img 
                     src={loadedTextures[fruit.level].toDataURL()} 
@@ -387,6 +400,13 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
               ctx.arc(0, 0, radius, 0, Math.PI * 2);
               ctx.clip();
               ctx.drawImage(loadedTextures[level], -radius, -radius, radius * 2, radius * 2);
+              
+              // Add color-matched outline for the face (thinner and slightly expanded outwards)
+              ctx.beginPath();
+              ctx.arc(0, 0, radius + 0.5, 0, Math.PI * 2);
+              ctx.strokeStyle = FRUIT_LEVELS[level].color;
+              ctx.lineWidth = 7;
+              ctx.stroke();
             } else {
               ctx.beginPath();
               ctx.arc(0, 0, radius, 0, Math.PI * 2);
@@ -403,20 +423,27 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
 
         if (gameOverTriggered) { setIsGameOver(true); setIsStarted(false); }
 
-        if (isStarted && !isGameOver) {
-          const type = currentFruitTypeRef.current;
-          const config = FRUIT_LEVELS[type];
-          ctx.save(); ctx.setLineDash([8, 8]); ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)'; ctx.beginPath();
-          ctx.moveTo(inputXRef.current, SPAWN_Y); ctx.lineTo(inputXRef.current, CANVAS_HEIGHT); ctx.stroke(); ctx.restore();
-          ctx.globalAlpha = 0.6; ctx.save(); ctx.translate(inputXRef.current, SPAWN_Y);
+          if (isStarted && !isGameOver) {
+            const type = currentFruitTypeRef.current;
+            const config = FRUIT_LEVELS[type];
+            ctx.save(); ctx.setLineDash([8, 8]); ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)'; ctx.beginPath();
+            ctx.moveTo(inputXRef.current, SPAWN_Y); ctx.lineTo(inputXRef.current, CANVAS_HEIGHT); ctx.stroke(); ctx.restore();
+            ctx.globalAlpha = 0.6; ctx.save(); ctx.translate(inputXRef.current, SPAWN_Y);
 
-          ctx.beginPath();
-          ctx.arc(0, 0, config.radius, 0, Math.PI * 2);
-          ctx.clip();
+            ctx.beginPath();
+            ctx.arc(0, 0, config.radius, 0, Math.PI * 2);
+            ctx.clip();
 
-          if (loadedTextures[type]) {
-            ctx.drawImage(loadedTextures[type], -config.radius, -config.radius, config.radius * 2, config.radius * 2);
-          } else {
+            if (loadedTextures[type]) {
+              ctx.drawImage(loadedTextures[type], -config.radius, -config.radius, config.radius * 2, config.radius * 2);
+              
+              // Add color-matched outline for the preview face (thinner and slightly expanded outwards)
+              ctx.beginPath();
+              ctx.arc(0, 0, config.radius + 0.5, 0, Math.PI * 2);
+              ctx.strokeStyle = FRUIT_LEVELS[type].color;
+              ctx.lineWidth = 7;
+              ctx.stroke();
+            } else {
             ctx.beginPath(); ctx.arc(0, 0, config.radius, 0, Math.PI * 2); ctx.fillStyle = config.color; ctx.fill();
           }
           ctx.restore(); ctx.globalAlpha = 1.0;
@@ -462,11 +489,10 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
 
   return (
     <div className="flex flex-col w-full h-full">
-      <Scoreboard score={score} bestScore={bestScore} />
-      
-      <div className="w-full flex justify-between items-center px-2 mb-1 shrink-0">
-         <NextFruitIndicator nextType={nextFruitType} loadedTextures={loadedTextures} />
-         <div className="w-16" /> 
+      {/* Header container for Score and Next */}
+      <div className="w-full px-2 mb-2 shrink-0 flex flex-col gap-1">
+        <Scoreboard score={score} bestScore={bestScore} />
+        <NextFruitIndicator nextType={nextFruitType} loadedTextures={loadedTextures} />
       </div>
 
        <div className="flex-1 w-full min-h-0 flex items-center justify-center overflow-hidden">
