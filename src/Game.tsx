@@ -159,61 +159,51 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
   const [isStarted, setIsStarted] = useState(false);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const lastSoundTimeRef = useRef(0);
+  const lastMergeSoundTimeRef = useRef(0);
 
   // --- Audio System ---
 
   const playMergeSound = (level: number) => {
     if (!audioCtxRef.current) return;
     const ctx = audioCtxRef.current;
-    if (ctx.state === 'suspended') ctx.resume();
-    
-    const now = ctx.currentTime;
-    if (now - lastSoundTimeRef.current < 0.1) return;
-    lastSoundTimeRef.current = now;
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
+    // Non-blocking resume attempt
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
     
-    osc.type = 'sine';
+    // If state is still not running, skip to avoid blocking/crashing
+    if (ctx.state !== 'running' && ctx.state !== 'suspended') return;
+
+    const now = ctx.currentTime;
+    if (now - lastMergeSoundTimeRef.current < 0.1) return;
+    lastMergeSoundTimeRef.current = now;
+
+    // Defensive check for finite numbers
     const baseFreq = 220 + level * 40;
-    osc.frequency.setValueAtTime(baseFreq, now);
-    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.1);
+    if (!Number.isFinite(baseFreq)) return;
 
-    gain.gain.setValueAtTime(0.1, now);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+    try {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(baseFreq, now);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.1);
 
-    osc.connect(gain);
-    gain.connect(ctx.destination);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
 
-    osc.start();
-    osc.stop(now + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(now + 0.3);
+    } catch (e) {
+      console.error("Merge sound error:", e);
+    }
   };
 
-  const playCollisionSound = (intensity: number) => {
-    if (!audioCtxRef.current || intensity < 1) return;
-    const ctx = audioCtxRef.current;
-    if (ctx.state === 'suspended') ctx.resume();
-
-    const now = ctx.currentTime;
-    if (now - lastSoundTimeRef.current < 0.05) return; 
-    lastSoundTimeRef.current = now;
-
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(100, now);
-    
-    gain.gain.setValueAtTime(Math.min(0.03, intensity * 0.01), now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start();
-    osc.stop(now + 0.1);
-  };
 
   // --- Game Logic ---
 
@@ -322,11 +312,6 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
 
     createWalls();
 
-    Matter.Events.on(engine, 'collisionStart', (event: Matter.Events.CollisionStartEvent) => {
-      event.pairs.forEach((pair: Matter.IPair) => {
-        playCollisionSound(pair.collision.speed);
-      });
-    });
 
     Matter.Events.on(engine, 'afterUpdate', () => {
       const pairs = engine.pairs.list;
