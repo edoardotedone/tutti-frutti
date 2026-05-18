@@ -54,66 +54,31 @@ const Scoreboard = memo(({ score, bestScore }: { score: number; bestScore: numbe
 ));
 
 const NextFruitIndicator = memo(({ nextType, loadedTextures }: { nextType: number; loadedTextures: Record<number, HTMLCanvasElement> }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !loadedTextures[nextType]) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const texture = loadedTextures[nextType];
-    const size = 56;
-    canvas.width = size;
-    canvas.height = size;
-
-    ctx.clearRect(0, 0, size, size);
-    
-    // Draw image with a padding factor to prevent it from touching the canvas edges (clipping)
-    const paddingFactor = 0.9; 
-    const drawSize = size * paddingFactor;
-    const radius = drawSize / 2;
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(size / 2, size / 2, radius, 0, Math.PI * 2);
-    ctx.clip();
-    
-    const scale = drawSize / Math.max(texture.width, texture.height);
-    const w = texture.width * scale;
-    const h = texture.height * scale;
-    ctx.drawImage(texture, (size - w) / 2, (size - h) / 2, w, h);
-    ctx.restore();
-
-    // Add color-matched outline at the actual canvas boundary
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(size / 2, size / 2, (size / 2) + 0.5, 0, Math.PI * 2);
-    ctx.strokeStyle = FRUIT_LEVELS[nextType].color;
-    ctx.lineWidth = 4;
-    ctx.stroke();
-    ctx.restore();
-  }, [nextType, loadedTextures]);
-
   return (
     <div className="flex flex-col items-center min-w-[60px]">
       <span className="text-[10px] uppercase tracking-widest text-slate-400 mb-1 font-semibold">Next</span>
-      <div className="relative w-12 h-12 flex items-center justify-center">
+      <div 
+        className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden shadow-sm relative"
+        style={{ 
+          border: `3px solid ${shadeColor(FRUIT_LEVELS[nextType].color, -20)}`
+        }}
+      >
         {loadedTextures[nextType] ? (
-          <canvas ref={canvasRef} className="w-12 h-12" />
+          <img 
+            src={loadedTextures[nextType].toDataURL()} 
+            className="w-full h-full object-cover"
+            alt=""
+          />
         ) : (
           <div 
-            className="w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-sm" 
-            style={{ 
-              backgroundColor: FRUIT_LEVELS[nextType].color,
-              border: `3px solid ${shadeColor(FRUIT_LEVELS[nextType].color, -20)}`
-            }}
+            className="w-full h-full flex items-center justify-center text-lg"
+            style={{ backgroundColor: FRUIT_LEVELS[nextType].color }}
           >
             {FRUIT_LEVELS[nextType].icon}
-          </div >
+          </div>
         )}
-      </div >
-    </div >
+      </div>
+    </div>
   );
 });
 
