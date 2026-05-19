@@ -53,17 +53,18 @@ const Scoreboard = memo(({ score, bestScore, darkMode }: { score: number; bestSc
   </div>
 ));
 
-const NextFruitIndicator = memo(({ nextType, loadedTextures }: { nextType: number; loadedTextures: Record<number, HTMLCanvasElement> }) => {
+const NextFruitIndicator = memo(({ nextType, loadedTextures, darkMode }: { nextType: number; loadedTextures: Record<number, HTMLCanvasElement>; darkMode?: boolean }) => {
   const borderColor = useMemo(() => shadeColor(FRUIT_LEVELS[nextType].color, -20), [nextType]);
   const textureUrl = useMemo(() => loadedTextures[nextType]?.toDataURL(), [nextType, loadedTextures[nextType]]);
 
   return (
     <div className="flex flex-col items-center min-w-[60px]">
-      <span className="text-[10px] uppercase tracking-widest text-slate-400 mb-1 font-semibold">Next</span>
+      <span className={cn("text-[10px] uppercase tracking-widest mb-1 font-semibold", darkMode ? "text-slate-500" : "text-slate-400")}>Next</span>
       <div
         className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden shadow-sm relative"
         style={{
-          border: `3px solid ${borderColor}`
+          border: `3px solid ${borderColor}`,
+          background: darkMode ? '#2a2a3e' : '#ffffff'
         }}
       >
         {textureUrl ? (
@@ -85,7 +86,7 @@ const NextFruitIndicator = memo(({ nextType, loadedTextures }: { nextType: numbe
   );
 });
 
-const EvolutionBar = memo(({ score, loadedTextures }: { score: number; loadedTextures: Record<number, HTMLCanvasElement> }) => {
+const EvolutionBar = memo(({ score, loadedTextures, darkMode }: { score: number; loadedTextures: Record<number, HTMLCanvasElement>; darkMode?: boolean }) => {
   const textureUrls = useMemo(() => {
     const urls: Record<number, string> = {};
     FRUIT_LEVELS.forEach((fruit) => {
@@ -102,7 +103,7 @@ const EvolutionBar = memo(({ score, loadedTextures }: { score: number; loadedTex
         {FRUIT_LEVELS.map((fruit) => {
           const isKingSuika = fruit.level === FRUIT_LEVELS.length - 1;
           return (
-            <div key={fruit.level} className={cn("flex flex-col items-center opacity-40 transition-opacity", score > 0 && "opacity-100")}>
+            <div key={fruit.level} className={cn("flex flex-col items-center opacity-40 transition-opacity", score > 0 && "opacity-100", darkMode && "opacity-60")}>
               <div
                 className="rounded-full shadow-sm flex items-center justify-center overflow-hidden border border-black/5 relative"
                 style={{
@@ -161,10 +162,11 @@ interface GameContentProps {
 function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode }: GameContentProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine | null>(null);
-  const renderRef = useRef<Matter.Render | null>(null);
   const runnerRef = useRef<Matter.Runner | null>(null);
   const inputXRef = useRef(CANVAS_WIDTH / 2);
   const lastSpawnTimeRef = useRef(0);
+  // Retina DPI support
+  const dprRef = useRef(1);
 
   const [score, setScore] = useState(0);
   const [bestScore, setBestScore] = useState(0);
@@ -178,6 +180,8 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
   // Ref synced with state for safe access inside the render loop without triggering re-setup
   const isGameOverRef = useRef(false);
   useEffect(() => { isGameOverRef.current = isGameOver; }, [isGameOver]);
+  const darkModeRef = useRef(darkMode);
+  useEffect(() => { darkModeRef.current = darkMode; }, [darkMode]);
 
   // Refs for proper render loop cleanup
   const activeRef = useRef(true);
@@ -185,6 +189,8 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
 
   // Set for deduplicating merges (keys: "bodyA_id-bodyB_id")
   const mergedPairsRef = useRef<Set<string>>(new Set());
+  // Queue for deferred merge processing (avoids modifying world during collision iteration)
+  const pendingMergesRef = useRef<Array<{ level: number; x: number; y: number }>>([]);
 
   // Countdown state for game-over warning
   const countdownRef = useRef(0);
@@ -263,7 +269,7 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
       friction: 0.3,
       frictionAir: 0.02,
       slop: 0.02,
-      mass: 1 + level * 2,
+      mass: Math.pow(FRUIT_LEVELS[level].radius / 15, 2),
       label: `fruit_${level}`,
       isStatic: false,
       collisionFilter: { group: 0, category: 0x0001, mask: 0x0001 },
@@ -286,28 +292,23 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
     Matter.Composite.add(engineRef.current.world, walls);
   };
 
-  const handleMerge = (pair: Matter.IPair) => {
-    const { bodyA, bodyB } = pair;
-    if (!bodyA.label.startsWith('fruit_') || !bodyB.label.startsWith('fruit_')) return;
-    if (bodyA.label === bodyB.label) {
-      const level = parseInt(bodyA.label.split('_')[1], 10);
-      if (level >= FRUIT_LEVELS.length - 1) {
-        Matter.Composite.remove(engineRef.current!.world, [bodyA, bodyB]);
+  const processPendingMerges = () => {
+    if (!engineRef.current || pendingMergesRef.current.length === 0) return;
+    const merges = pendingMergesRef.current;
+    pendingMergesRef.current = [];
+
+    for (const merge of merges) {
+      if (merge.level >= FRUIT_LEVELS.length - 1) {
         setIsWin(true);
         return;
       }
 
-      const midX = (bodyA.position.x + bodyB.position.x) / 2;
-      const midY = (bodyA.position.y + bodyB.position.y) / 2;
-
-      Matter.Composite.remove(engineRef.current!.world, [bodyA, bodyB]);
-
-      const newFruit = spawnFruit(level + 1, midX, midY);
+      const newFruit = spawnFruit(merge.level + 1, merge.x, merge.y);
       if (newFruit) Matter.Sleeping.set(newFruit, false);
-      
-      playMergeSound(level);
+
+      playMergeSound(merge.level);
       setScore((prev: number) => {
-        const newScore = prev + FRUIT_LEVELS[level].score;
+        const newScore = prev + FRUIT_LEVELS[merge.level].score;
         if (newScore > bestScore) {
           setBestScore(newScore);
           localStorage.setItem('suika-best-score', newScore.toString());
@@ -315,6 +316,36 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
         return newScore;
       });
     }
+  };
+
+  const handleMerge = (pair: Matter.IPair) => {
+    const { bodyA, bodyB } = pair;
+    if (!bodyA.label.startsWith('fruit_') || !bodyB.label.startsWith('fruit_')) return;
+    if (bodyA.label !== bodyB.label) return;
+
+    const level = parseInt(bodyA.label.split('_')[1], 10);
+
+    // Deduplication: create a stable key from the two body ids (sorted)
+    const idA = bodyA.id;
+    const idB = bodyB.id;
+    const pairKey = idA < idB ? `${idA}-${idB}` : `${idB}-${idA}`;
+    if (mergedPairsRef.current.has(pairKey)) return;
+    mergedPairsRef.current.add(pairKey);
+
+    // Cap set size to prevent memory growth (keep last 500 entries)
+    if (mergedPairsRef.current.size > 500) {
+      const arr = Array.from(mergedPairsRef.current);
+      mergedPairsRef.current = new Set(arr.slice(-250));
+    }
+
+    const midX = (bodyA.position.x + bodyB.position.x) / 2;
+    const midY = (bodyA.position.y + bodyB.position.y) / 2;
+
+    // Remove both bodies immediately (safe in collisionStart since iteration is over)
+    Matter.Composite.remove(engineRef.current!.world, [bodyA, bodyB]);
+
+    // Queue merge for deferred processing
+    pendingMergesRef.current.push({ level, x: midX, y: midY });
   };
 
   const startNewGame = () => {
@@ -340,15 +371,16 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
     engineRef.current = engine;
     runnerRef.current = runner;
 
-    const render = Matter.Render.create({
-      canvas: canvasRef.current!,
-      engine: engine,
-      options: { width: CANVAS_WIDTH, height: CANVAS_HEIGHT, wireframes: false, background: 'transparent' }
-    });
-    renderRef.current = render;
+    // Retina DPI: scale canvas internal resolution for crisp rendering
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const dpr = window.devicePixelRatio || 1;
+      dprRef.current = dpr;
+      canvas.width = CANVAS_WIDTH * dpr;
+      canvas.height = CANVAS_HEIGHT * dpr;
+    }
 
     createWalls();
-
 
     Matter.Events.on(engine, 'collisionStart', (event: Matter.Event<{}>) => {
       const pairs = event.pairs;
@@ -357,16 +389,39 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
       });
     });
 
+    // Process queued merges after each physics step (safe: no longer iterating collisions)
+    Matter.Events.on(engine, 'afterUpdate', () => {
+      processPendingMerges();
+    });
+
     Matter.Runner.run(runner, engine);
+
+    // Pause physics when tab is hidden, resume when visible
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        Matter.Runner.stop(runner);
+      } else {
+        Matter.Runner.run(runner, engine);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     const loop = () => {
       if (!activeRef.current) return;
-      const ctx = canvasRef.current?.getContext('2d');
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext('2d');
+      const dpr = dprRef.current;
       if (ctx && engine.world.bodies.length > 0) {
+        // Scale context for DPI-aware rendering
+        ctx.save();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
         ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
+        // Dark mode aware colors
+        const isDark = darkModeRef.current;
         ctx.setLineDash([5, 5]);
-        ctx.strokeStyle = '#ff4444';
+        ctx.strokeStyle = isDark ? 'rgba(255,100,100,0.5)' : 'rgba(255,68,68,0.6)';
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(0, GAME_OVER_Y); ctx.lineTo(CANVAS_WIDTH, GAME_OVER_Y); ctx.stroke();
         ctx.setLineDash([]);
@@ -387,7 +442,7 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
               ctx.arc(0, 0, radius, 0, Math.PI * 2);
               ctx.clip();
               ctx.drawImage(loadedTextures[level], -radius, -radius, radius * 2, radius * 2);
-              
+
               // Add color-matched outline for the face (thinner and slightly expanded outwards)
               ctx.beginPath();
               ctx.arc(0, 0, radius + 0.5, 0, Math.PI * 2);
@@ -423,31 +478,33 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
           if (countdownRef.current !== 0) { countdownRef.current = 0; setCountdown(0); }
         }
 
-          if (!isGameOverRef.current) {
-            const type = currentFruitTypeRef.current;
-            const config = FRUIT_LEVELS[type];
-            ctx.save(); ctx.setLineDash([8, 8]); ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)'; ctx.beginPath();
-            ctx.moveTo(inputXRef.current, SPAWN_Y); ctx.lineTo(inputXRef.current, CANVAS_HEIGHT); ctx.stroke(); ctx.restore();
-            ctx.globalAlpha = 0.6; ctx.save(); ctx.translate(inputXRef.current, SPAWN_Y);
+        if (!isGameOverRef.current) {
+          const type = currentFruitTypeRef.current;
+          const config = FRUIT_LEVELS[type];
+          ctx.save(); ctx.setLineDash([8, 8]); ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0, 0, 0, 0.15)'; ctx.beginPath();
+          ctx.moveTo(inputXRef.current, SPAWN_Y); ctx.lineTo(inputXRef.current, CANVAS_HEIGHT); ctx.stroke(); ctx.restore();
+          ctx.globalAlpha = 0.6; ctx.save(); ctx.translate(inputXRef.current, SPAWN_Y);
 
+          ctx.beginPath();
+          ctx.arc(0, 0, config.radius, 0, Math.PI * 2);
+          ctx.clip();
+
+          if (loadedTextures[type]) {
+            ctx.drawImage(loadedTextures[type], -config.radius, -config.radius, config.radius * 2, config.radius * 2);
+
+            // Add color-matched outline for the preview face (thinner and slightly expanded outwards)
             ctx.beginPath();
-            ctx.arc(0, 0, config.radius, 0, Math.PI * 2);
-            ctx.clip();
-
-            if (loadedTextures[type]) {
-              ctx.drawImage(loadedTextures[type], -config.radius, -config.radius, config.radius * 2, config.radius * 2);
-              
-              // Add color-matched outline for the preview face (thinner and slightly expanded outwards)
-              ctx.beginPath();
-              ctx.arc(0, 0, config.radius + 0.5, 0, Math.PI * 2);
-              ctx.strokeStyle = FRUIT_LEVELS[type].color;
-              ctx.lineWidth = 7;
-              ctx.stroke();
-            } else {
+            ctx.arc(0, 0, config.radius + 0.5, 0, Math.PI * 2);
+            ctx.strokeStyle = FRUIT_LEVELS[type].color;
+            ctx.lineWidth = 7;
+            ctx.stroke();
+          } else {
             ctx.beginPath(); ctx.arc(0, 0, config.radius, 0, Math.PI * 2); ctx.fillStyle = config.color; ctx.fill();
           }
           ctx.restore(); ctx.globalAlpha = 1.0;
         }
+
+        ctx.restore(); // Restore DPI transform
       }
       requestAnimationFrame(loop);
     };
@@ -455,31 +512,34 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
     const animFrame = requestAnimationFrame(loop);
     return () => {
       activeRef.current = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       Matter.Engine.clear(engine);
-      Matter.Render.stop(render);
       Matter.Runner.stop(runner);
       cancelAnimationFrame(animFrame);
     };
   }, [gameId]);
 
+  // Use refs instead of stale state inside event handlers
   const onInteractionMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (isGameOver) return;
+    if (isGameOverRef.current) return;
+    // Prevent default touch scrolling while dragging
+    if ('touches' in e) e.preventDefault();
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    let clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
+    const clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
     const scaledX = ((clientX - rect.left) / rect.width) * CANVAS_WIDTH;
-    const config = FRUIT_LEVELS[currentFruitType];
+    const config = FRUIT_LEVELS[currentFruitTypeRef.current];
     inputXRef.current = Math.max(config.radius, Math.min(CANVAS_WIDTH - config.radius, scaledX));
   };
 
   const onInteractionEnd = () => {
-    if (isGameOver) return;
+    if (isGameOverRef.current) return;
     const now = Date.now();
     if (now - lastSpawnTimeRef.current < 500) return;
-    const fruit = spawnFruit(currentFruitType, inputXRef.current, SPAWN_Y);
+    const fruit = spawnFruit(currentFruitTypeRef.current, inputXRef.current, SPAWN_Y);
     if (fruit) {
       lastSpawnTimeRef.current = now;
-      const next = nextFruitType;
+      const next = nextFruitTypeRef.current;
       setCurrentFruitType(next);
       currentFruitTypeRef.current = next;
       const newNext = Math.floor(Math.random() * 4);
@@ -494,7 +554,7 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
       <div className="w-full px-2 mb-2 shrink-0 flex flex-col gap-1">
         <Scoreboard score={score} bestScore={bestScore} darkMode={darkMode} />
         <div className="flex justify-between items-center">
-          <NextFruitIndicator nextType={nextFruitType} loadedTextures={loadedTextures} />
+          <NextFruitIndicator nextType={nextFruitType} loadedTextures={loadedTextures} darkMode={darkMode} />
           <button
             onClick={() => setDarkMode((d) => !d)}
             className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-200 hover:bg-slate-300 transition-colors"
@@ -505,7 +565,7 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
       </div>
 
        <div className="flex-1 w-full min-h-0 flex items-center justify-center overflow-hidden">
-         <div className="relative aspect-[400/600] max-h-full max-w-full bg-[#ffeeb2] rounded-3xl overflow-hidden shadow-2xl border-4 border-[#e6d08b]">
+         <div className={cn("relative aspect-[400/600] max-h-full rounded-3xl overflow-hidden shadow-2xl border-4 transition-colors", darkMode ? "bg-[#3a3a52] border-[#4a4a62]" : "bg-[#ffeeb2] border-[#e6d08b]")}>
            <canvas
              ref={canvasRef}
              className="w-full h-full object-contain block"
@@ -549,7 +609,7 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
         </div>
       )}
 
-      <EvolutionBar score={score} loadedTextures={loadedTextures} />
+      <EvolutionBar score={score} loadedTextures={loadedTextures} darkMode={darkMode} />
     </div>
   );
 }

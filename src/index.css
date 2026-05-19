@@ -1,1 +1,10 @@
 @import "tailwindcss";
+
+/* Custom scrollbar suppression for EvolutionBar */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
