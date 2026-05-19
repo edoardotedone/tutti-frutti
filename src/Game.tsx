@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useState, memo, useMemo } from 'react';
 import Matter from 'matter-js';
-import { Trophy, RefreshCw, Moon, Sun } from 'lucide-react';
+import { Trophy, RefreshCw, Moon, Sun, Volume2, VolumeX } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { FRUIT_LEVELS, CANVAS_WIDTH, CANVAS_HEIGHT, GAME_OVER_Y, SPAWN_Y, type FruitLevel } from './constants';
@@ -198,10 +198,21 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const lastMergeSoundTimeRef = useRef(0);
+  // Track which body IDs have already played their collision sound
+  const collisionPlayedRef = useRef<Set<number>>(new Set());
+
+  // Sound enabled state (persisted to localStorage)
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    const saved = localStorage.getItem('suika-sound');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const soundEnabledRef = useRef(soundEnabled);
+  useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
 
   // --- Audio System ---
 
   const playMergeSound = (level: number) => {
+    if (!soundEnabledRef.current) return;
     if (!audioCtxRef.current) return;
     const ctx = audioCtxRef.current;
 
@@ -226,19 +237,50 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
       const gain = ctx.createGain();
       
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(baseFreq, now);
-      osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.1);
+      osc.frequency.setValueAtTime(baseFreq * 1.2, now);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq, now + 0.15);
 
-      gain.gain.setValueAtTime(0.1, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
 
       osc.connect(gain);
       gain.connect(ctx.destination);
 
       osc.start();
-      osc.stop(now + 0.3);
+      osc.stop(now + 0.25);
     } catch (e) {
       console.error("Merge sound error:", e);
+    }
+  };
+
+  const playCollisionSound = () => {
+    if (!soundEnabledRef.current) return;
+    if (!audioCtxRef.current) return;
+    const ctx = audioCtxRef.current;
+
+    if (ctx.state === 'suspended') { ctx.resume(); }
+    if (ctx.state !== 'running' && ctx.state !== 'suspended') return;
+
+    const now = ctx.currentTime;
+    try {
+      // Short "thud" sound: low frequency triangle with quick decay
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(120, now);
+      osc.frequency.exponentialRampToValueAtTime(60, now + 0.08);
+
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start();
+      osc.stop(now + 0.1);
+    } catch (e) {
+      // Silently ignore
     }
   };
 
@@ -304,7 +346,11 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
       }
 
       const newFruit = spawnFruit(merge.level + 1, merge.x, merge.y);
-      if (newFruit) Matter.Sleeping.set(newFruit, false);
+      if (newFruit) {
+        Matter.Sleeping.set(newFruit, false);
+        // Suppress collision sound for the newly merged fruit so merge sound plays alone
+        collisionPlayedRef.current.add(newFruit.id);
+      }
 
       playMergeSound(merge.level);
       setScore((prev: number) => {
@@ -385,7 +431,37 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
     Matter.Events.on(engine, 'collisionStart', (event: Matter.Event<{}>) => {
       const pairs = event.pairs;
       pairs.forEach((pair: Matter.IPair) => {
-        handleMerge(pair);
+        const { bodyA, bodyB } = pair;
+
+        const aFruit = bodyA.label.startsWith('fruit_');
+        const bFruit = bodyB.label.startsWith('fruit_');
+
+        // Merge takes priority: same-level fruit pair → merge, skip collision sound
+        if (aFruit && bFruit && bodyA.label === bodyB.label) {
+          handleMerge(pair);
+          return; // Merge priority: no collision sound
+        }
+
+        // Collision sound: play once per fruit on first contact
+        // Applies to fruit+wall, fruit+floor, and different-level fruit+fruit
+        if (aFruit) {
+          if (!collisionPlayedRef.current.has(bodyA.id)) {
+            collisionPlayedRef.current.add(bodyA.id);
+            playCollisionSound();
+          }
+        }
+        if (bFruit) {
+          if (!collisionPlayedRef.current.has(bodyB.id)) {
+            collisionPlayedRef.current.add(bodyB.id);
+            playCollisionSound();
+          }
+        }
+
+        // Cap set size to prevent memory growth
+        if (collisionPlayedRef.current.size > 200) {
+          const arr = Array.from(collisionPlayedRef.current);
+          collisionPlayedRef.current = new Set(arr.slice(-100));
+        }
       });
     });
 
@@ -555,12 +631,24 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
         <Scoreboard score={score} bestScore={bestScore} darkMode={darkMode} />
         <div className="flex justify-between items-center">
           <NextFruitIndicator nextType={nextFruitType} loadedTextures={loadedTextures} darkMode={darkMode} />
-          <button
-            onClick={() => setDarkMode((d) => !d)}
-            className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-200 hover:bg-slate-300 transition-colors"
-          >
-            {darkMode ? <Sun size={18} className="text-yellow-500" /> : <Moon size={18} className="text-slate-600" />}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const next = !soundEnabled;
+                setSoundEnabled(next);
+                localStorage.setItem('suika-sound', String(next));
+              }}
+              className={cn("w-10 h-10 rounded-full flex items-center justify-center transition-colors", darkMode ? "bg-slate-600 hover:bg-slate-500" : "bg-slate-200 hover:bg-slate-300")}
+            >
+              {soundEnabled ? <Volume2 size={18} className="text-slate-700" /> : <VolumeX size={18} className="text-slate-400" />}
+            </button>
+            <button
+              onClick={() => setDarkMode((d) => !d)}
+              className={cn("w-10 h-10 rounded-full flex items-center justify-center transition-colors", darkMode ? "bg-slate-600 hover:bg-slate-500" : "bg-slate-200 hover:bg-slate-300")}
+            >
+              {darkMode ? <Sun size={18} className="text-yellow-500" /> : <Moon size={18} className="text-slate-600" />}
+            </button>
+          </div>
         </div>
       </div>
 
