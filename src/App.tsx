@@ -1,10 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import Game from './Game';
 import { FRUIT_LEVELS } from './constants';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 export default function App() {
   const [loadedTextures, setLoadedTextures] = useState<Record<number, HTMLCanvasElement> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     async function loadAllTextures() {
@@ -78,5 +85,9 @@ export default function App() {
     );
   }
 
-  return <Game loadedTextures={loadedTextures} />;
+  return (
+    <div className={cn("w-full h-[100dvh] flex items-center justify-center transition-colors", darkMode ? "bg-[#1a1a2e]" : "bg-white")} style={{ margin: 0, padding: 0 }}>
+      <Game loadedTextures={loadedTextures} darkMode={darkMode} setDarkMode={setDarkMode} />
+    </div>
+  );
 }

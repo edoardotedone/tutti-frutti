@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useRef, useState, memo } from 'react';
+import React, { useEffect, useRef, useState, memo, useMemo } from 'react';
 import Matter from 'matter-js';
-import { Trophy, RefreshCw, Play } from 'lucide-react';
+import { Trophy, RefreshCw, Moon, Sun } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { FRUIT_LEVELS, CANVAS_WIDTH, CANVAS_HEIGHT, GAME_OVER_Y, SPAWN_Y, type FruitLevel } from './constants';
@@ -37,40 +37,43 @@ function shadeColor(color: string, percent: number) {
 
 // --- Sub-components ---
 
-const Scoreboard = memo(({ score, bestScore }: { score: number; bestScore: number }) => (
+const Scoreboard = memo(({ score, bestScore, darkMode }: { score: number; bestScore: number; darkMode: boolean }) => (
   <div className="w-full max-w-[400px] flex justify-between items-baseline px-2 shrink-0">
     <div className="flex flex-col">
       <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold leading-none mb-1">Score</span>
-      <span className="text-3xl font-bold text-slate-800 tabular-nums leading-none">{score}</span>
+      <span className={cn("text-3xl font-bold tabular-nums leading-none", darkMode ? "text-slate-200" : "text-slate-800")}>{score}</span>
     </div>
     <div className="flex flex-col items-end">
       <div className="flex items-center gap-1 text-[10px] uppercase tracking-widest text-[#d4af37] font-semibold leading-none mb-1">
         <Trophy size={10} strokeWidth={3} />
         Best
       </div>
-      <span className="text-3xl font-bold text-slate-600 tabular-nums leading-none">{bestScore}</span>
+      <span className={cn("text-3xl font-bold tabular-nums leading-none", darkMode ? "text-slate-400" : "text-slate-600")}>{bestScore}</span>
     </div>
   </div>
 ));
 
 const NextFruitIndicator = memo(({ nextType, loadedTextures }: { nextType: number; loadedTextures: Record<number, HTMLCanvasElement> }) => {
+  const borderColor = useMemo(() => shadeColor(FRUIT_LEVELS[nextType].color, -20), [nextType]);
+  const textureUrl = useMemo(() => loadedTextures[nextType]?.toDataURL(), [nextType, loadedTextures[nextType]]);
+
   return (
     <div className="flex flex-col items-center min-w-[60px]">
       <span className="text-[10px] uppercase tracking-widest text-slate-400 mb-1 font-semibold">Next</span>
-      <div 
+      <div
         className="w-12 h-12 rounded-full flex items-center justify-center overflow-hidden shadow-sm relative"
-        style={{ 
-          border: `3px solid ${shadeColor(FRUIT_LEVELS[nextType].color, -20)}`
+        style={{
+          border: `3px solid ${borderColor}`
         }}
       >
-        {loadedTextures[nextType] ? (
-          <img 
-            src={loadedTextures[nextType].toDataURL()} 
+        {textureUrl ? (
+          <img
+            src={textureUrl}
             className="w-full h-full object-cover"
             alt=""
           />
         ) : (
-          <div 
+          <div
             className="w-full h-full flex items-center justify-center text-lg"
             style={{ backgroundColor: FRUIT_LEVELS[nextType].color }}
           >
@@ -83,6 +86,16 @@ const NextFruitIndicator = memo(({ nextType, loadedTextures }: { nextType: numbe
 });
 
 const EvolutionBar = memo(({ score, loadedTextures }: { score: number; loadedTextures: Record<number, HTMLCanvasElement> }) => {
+  const textureUrls = useMemo(() => {
+    const urls: Record<number, string> = {};
+    FRUIT_LEVELS.forEach((fruit) => {
+      if (loadedTextures[fruit.level]) {
+        urls[fruit.level] = loadedTextures[fruit.level].toDataURL();
+      }
+    });
+    return urls;
+  }, [loadedTextures]);
+
   return (
     <div className="w-full max-w-[400px] mt-1 overflow-x-auto no-scrollbar py-1 shrink-0">
       <div className="flex gap-4 px-4 min-w-max items-center">
@@ -90,19 +103,19 @@ const EvolutionBar = memo(({ score, loadedTextures }: { score: number; loadedTex
           const isKingSuika = fruit.level === FRUIT_LEVELS.length - 1;
           return (
             <div key={fruit.level} className={cn("flex flex-col items-center opacity-40 transition-opacity", score > 0 && "opacity-100")}>
-              <div 
-                className="rounded-full shadow-sm flex items-center justify-center overflow-hidden border border-black/5 relative" 
-                style={{ 
-                  backgroundColor: isKingSuika ? '#e2e8f0' : fruit.color, 
-                  width: 16 + fruit.level*2.5, 
-                  height: 16 + fruit.level*2.5 
+              <div
+                className="rounded-full shadow-sm flex items-center justify-center overflow-hidden border border-black/5 relative"
+                style={{
+                  backgroundColor: isKingSuika ? '#e2e8f0' : fruit.color,
+                  width: 16 + fruit.level * 2.5,
+                  height: 16 + fruit.level * 2.5
                 }}
               >
                  {isKingSuika ? (
-                   <span className="text-slate-500 font-bold" style={{ fontSize: `${10 + fruit.level * 0.5}px` }}>?</span >
-                 ) : loadedTextures[fruit.level] ? (
-                  <img 
-                    src={loadedTextures[fruit.level].toDataURL()} 
+                   <span className="text-slate-500 font-bold" style={{ fontSize: `${10 + fruit.level * 0.5}px` }}>?</span>
+                 ) : textureUrls[fruit.level] ? (
+                  <img
+                    src={textureUrls[fruit.level]}
                     className="w-full h-full object-cover"
                     alt=""
                   />
@@ -122,15 +135,17 @@ const EvolutionBar = memo(({ score, loadedTextures }: { score: number; loadedTex
 
 interface GameProps {
   loadedTextures: Record<number, HTMLCanvasElement>;
+  darkMode: boolean;
+  setDarkMode: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-export default function Game({ loadedTextures }: GameProps) {
+export default function Game({ loadedTextures, darkMode, setDarkMode }: GameProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [gameId, setGameId] = useState(0);
 
   return (
-    <div ref={containerRef} key={gameId} className="w-full max-w-[400px] h-[100dvh] flex flex-col bg-[#fdfaf3] select-none touch-none font-sans overflow-hidden mx-auto p-2">
-      <GameContent loadedTextures={loadedTextures} setGameId={setGameId} gameId={gameId} />
+    <div ref={containerRef} key={gameId} className={cn("w-full max-w-[400px] h-[100dvh] flex flex-col select-none touch-none font-sans overflow-hidden mx-auto p-2 transition-colors", darkMode ? "bg-[#2a2a3e]" : "bg-[#fdfaf3]")}>
+      <GameContent loadedTextures={loadedTextures} setGameId={setGameId} gameId={gameId} darkMode={darkMode} setDarkMode={setDarkMode} />
     </div >
   );
 }
@@ -139,9 +154,11 @@ interface GameContentProps {
   loadedTextures: Record<number, HTMLCanvasElement>;
   setGameId: React.Dispatch<React.SetStateAction<number>>;
   gameId: number;
+  darkMode: boolean;
+  setDarkMode: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
-function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
+function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode }: GameContentProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<Matter.Engine | null>(null);
   const renderRef = useRef<Matter.Render | null>(null);
@@ -156,7 +173,22 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
   const currentFruitTypeRef = useRef(0);
   const nextFruitTypeRef = useRef(0);
   const [isGameOver, setIsGameOver] = useState(false);
-  const [isStarted, setIsStarted] = useState(false);
+  const [isWin, setIsWin] = useState(false);
+
+  // Ref synced with state for safe access inside the render loop without triggering re-setup
+  const isGameOverRef = useRef(false);
+  useEffect(() => { isGameOverRef.current = isGameOver; }, [isGameOver]);
+
+  // Refs for proper render loop cleanup
+  const activeRef = useRef(true);
+  const animFrameRef = useRef<number | null>(null);
+
+  // Set for deduplicating merges (keys: "bodyA_id-bodyB_id")
+  const mergedPairsRef = useRef<Set<string>>(new Set());
+
+  // Countdown state for game-over warning
+  const countdownRef = useRef(0);
+  const [countdown, setCountdown] = useState(0);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const lastMergeSoundTimeRef = useRef(0);
@@ -231,7 +263,7 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
       friction: 0.3,
       frictionAir: 0.02,
       slop: 0.02,
-      sleepThreshold: 360,
+      mass: 1 + level * 2,
       label: `fruit_${level}`,
       isStatic: false,
       collisionFilter: { group: 0, category: 0x0001, mask: 0x0001 },
@@ -259,7 +291,11 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
     if (!bodyA.label.startsWith('fruit_') || !bodyB.label.startsWith('fruit_')) return;
     if (bodyA.label === bodyB.label) {
       const level = parseInt(bodyA.label.split('_')[1], 10);
-      if (level >= FRUIT_LEVELS.length - 1) return;
+      if (level >= FRUIT_LEVELS.length - 1) {
+        Matter.Composite.remove(engineRef.current!.world, [bodyA, bodyB]);
+        setIsWin(true);
+        return;
+      }
 
       const midX = (bodyA.position.x + bodyB.position.x) / 2;
       const midY = (bodyA.position.y + bodyB.position.y) / 2;
@@ -287,8 +323,8 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
 
   useEffect(() => {
     setIsGameOver(false);
+    setIsWin(false);
     setScore(0);
-    setIsStarted(true);
     const initialFruit = Math.floor(Math.random() * 4);
     const nextFruit = Math.floor(Math.random() * 4);
     setCurrentFruitType(initialFruit);
@@ -298,7 +334,8 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
   }, [gameId]);
 
   useEffect(() => {
-    const engine = Matter.Engine.create({ enableSleeping: true });
+    activeRef.current = true;
+    const engine = Matter.Engine.create();
     const runner = Matter.Runner.create();
     engineRef.current = engine;
     runnerRef.current = runner;
@@ -313,8 +350,8 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
     createWalls();
 
 
-    Matter.Events.on(engine, 'afterUpdate', () => {
-      const pairs = engine.pairs.list;
+    Matter.Events.on(engine, 'collisionStart', (event: Matter.Event<{}>) => {
+      const pairs = event.pairs;
       pairs.forEach((pair: Matter.IPair) => {
         handleMerge(pair);
       });
@@ -323,7 +360,7 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
     Matter.Runner.run(runner, engine);
 
     const loop = () => {
-      if (isGameOver || gameId === undefined) return;
+      if (!activeRef.current) return;
       const ctx = canvasRef.current?.getContext('2d');
       if (ctx && engine.world.bodies.length > 0) {
         ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -335,7 +372,7 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
         ctx.setLineDash([]);
 
         const bodies = Matter.Composite.allBodies(engine.world);
-        let gameOverTriggered = false;
+        let maxViolationMs = 0;
 
         bodies.forEach((body: Matter.Body) => {
           if (body.label.startsWith('fruit_')) {
@@ -365,15 +402,28 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
             }
             ctx.restore();
 
-            if (body.position.y - radius < GAME_OVER_Y && body.velocity.y < 0.1 && body.velocity.y > -0.1) {
-              if (Date.now() - (body as any).spawnTime > 2000) gameOverTriggered = true;
+            if (body.position.y - radius < GAME_OVER_Y) {
+              const violation = Date.now() - (body as any).spawnTime - 1000;
+              if (violation > 0 && violation > maxViolationMs) maxViolationMs = violation;
             }
           }
         });
 
-        if (gameOverTriggered) { setIsGameOver(true); setIsStarted(false); }
+        const GAME_OVER_MS = 5000;
+        if (maxViolationMs > GAME_OVER_MS) {
+          setIsGameOver(true);
+          if (countdownRef.current !== 0) { countdownRef.current = 0; setCountdown(0); }
+        } else if (maxViolationMs > 0) {
+          const remaining = Math.ceil((GAME_OVER_MS - maxViolationMs) / 1000);
+          if (remaining !== countdownRef.current) {
+            countdownRef.current = remaining;
+            setCountdown(remaining);
+          }
+        } else {
+          if (countdownRef.current !== 0) { countdownRef.current = 0; setCountdown(0); }
+        }
 
-          if (isStarted && !isGameOver) {
+          if (!isGameOverRef.current) {
             const type = currentFruitTypeRef.current;
             const config = FRUIT_LEVELS[type];
             ctx.save(); ctx.setLineDash([8, 8]); ctx.strokeStyle = 'rgba(0, 0, 0, 0.15)'; ctx.beginPath();
@@ -404,15 +454,16 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
 
     const animFrame = requestAnimationFrame(loop);
     return () => {
+      activeRef.current = false;
       Matter.Engine.clear(engine);
       Matter.Render.stop(render);
       Matter.Runner.stop(runner);
       cancelAnimationFrame(animFrame);
     };
-  }, [loadedTextures, isStarted, isGameOver, gameId]);
+  }, [gameId]);
 
   const onInteractionMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (isGameOver || !isStarted) return;
+    if (isGameOver) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
     let clientX = 'touches' in e ? e.touches[0].clientX : (e as React.MouseEvent).clientX;
@@ -422,7 +473,7 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
   };
 
   const onInteractionEnd = () => {
-    if (isGameOver || !isStarted) return;
+    if (isGameOver) return;
     const now = Date.now();
     if (now - lastSpawnTimeRef.current < 500) return;
     const fruit = spawnFruit(currentFruitType, inputXRef.current, SPAWN_Y);
@@ -441,8 +492,16 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
     <div className="flex flex-col w-full h-full">
       {/* Header container for Score and Next */}
       <div className="w-full px-2 mb-2 shrink-0 flex flex-col gap-1">
-        <Scoreboard score={score} bestScore={bestScore} />
-        <NextFruitIndicator nextType={nextFruitType} loadedTextures={loadedTextures} />
+        <Scoreboard score={score} bestScore={bestScore} darkMode={darkMode} />
+        <div className="flex justify-between items-center">
+          <NextFruitIndicator nextType={nextFruitType} loadedTextures={loadedTextures} />
+          <button
+            onClick={() => setDarkMode((d) => !d)}
+            className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-200 hover:bg-slate-300 transition-colors"
+          >
+            {darkMode ? <Sun size={18} className="text-yellow-500" /> : <Moon size={18} className="text-slate-600" />}
+          </button>
+        </div>
       </div>
 
        <div className="flex-1 w-full min-h-0 flex items-center justify-center overflow-hidden">
@@ -458,15 +517,11 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
          </div>
        </div>
 
-      {!isStarted && !isGameOver && (
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-8 text-center z-50">
-          <button onClick={startNewGame} className="group flex flex-col items-center bg-white text-slate-900 px-8 py-6 rounded-3xl shadow-xl transform transition-all active:scale-95 hover:scale-105">
-            <div className="w-16 h-16 bg-[#ff6b6b] rounded-full flex items-center justify-center text-white mb-4 shadow-lg group-hover:bg-[#ff5252]">
-              <Play fill="currentColor" size={32} className="ml-1" />
-            </div>
-            <span className="text-2xl font-bold">Uniscile Tutte</span>
-            <span className="text-sm text-slate-500 mt-1 uppercase tracking-widest">Tutti Frutti</span>
-          </button>
+      {countdown > 0 && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-40">
+          <div className="text-8xl font-black text-red-500/80 animate-pulse drop-shadow-lg">
+            {countdown}
+          </div>
         </div>
       )}
 
@@ -477,6 +532,19 @@ function GameContent({ loadedTextures, setGameId, gameId }: GameContentProps) {
           <button onClick={startNewGame} className="flex items-center gap-3 bg-white text-[#ff6b6b] px-8 py-4 rounded-full font-bold shadow-2xl hover:bg-slate-50 transition-colors active:scale-95">
             <RefreshCw size={24} />
             Try Again
+          </button>
+        </div>
+      )}
+
+      {isWin && (
+        <div className="absolute inset-0 bg-[#d4af37]/95 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center text-white z-50">
+          <span className="text-6xl mb-4">👑</span>
+          <span className="text-5xl font-black mb-2 uppercase tracking-tight">You Win!</span>
+          <span className="text-lg opacity-90 mb-2 font-medium">King Suika Evolved!</span>
+          <span className="text-xl font-bold mb-8">Final Score: {score}</span>
+          <button onClick={startNewGame} className="flex items-center gap-3 bg-white text-[#d4af37] px-8 py-4 rounded-full font-bold shadow-2xl hover:bg-slate-50 transition-colors active:scale-95">
+            <RefreshCw size={24} />
+            Play Again
           </button>
         </div>
       )}
