@@ -11,7 +11,7 @@ function cn(...inputs: ClassValue[]) {
 export default function App() {
   const [loadedTextures, setLoadedTextures] = useState<Record<number, HTMLCanvasElement> | null>(null);
   const [loading, setLoading] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
 
   useEffect(() => {
     async function loadAllTextures() {

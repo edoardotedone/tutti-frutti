@@ -145,7 +145,7 @@ export default function Game({ loadedTextures, darkMode, setDarkMode }: GameProp
   const [gameId, setGameId] = useState(0);
 
   return (
-    <div ref={containerRef} key={gameId} className={cn("w-full max-w-[400px] h-[100dvh] flex flex-col select-none touch-none font-sans overflow-hidden mx-auto p-2 transition-colors", darkMode ? "bg-[#2a2a3e]" : "bg-[#fdfaf3]")}>
+    <div ref={containerRef} key={gameId} className={cn("w-full max-w-[400px] h-[100dvh] flex flex-col select-none touch-none font-sans overflow-hidden mx-auto p-2 transition-colors", darkMode ? "bg-[#2a2a3e]" : "bg-[#e8e0f0]")}>
       <GameContent loadedTextures={loadedTextures} setGameId={setGameId} gameId={gameId} darkMode={darkMode} setDarkMode={setDarkMode} />
     </div >
   );
@@ -519,11 +519,11 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
               ctx.clip();
               ctx.drawImage(loadedTextures[level], -radius, -radius, radius * 2, radius * 2);
 
-              // Add color-matched outline for the face (thinner and slightly expanded outwards)
+              // Add color-matched outline (scales: 3.5px on small fruits → 14px on large fruits)
               ctx.beginPath();
               ctx.arc(0, 0, radius + 0.5, 0, Math.PI * 2);
               ctx.strokeStyle = FRUIT_LEVELS[level].color;
-              ctx.lineWidth = 7;
+              ctx.lineWidth = 3.5 + (level / 11) * 10.5;
               ctx.stroke();
             } else {
               ctx.beginPath();
@@ -568,11 +568,11 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
           if (loadedTextures[type]) {
             ctx.drawImage(loadedTextures[type], -config.radius, -config.radius, config.radius * 2, config.radius * 2);
 
-            // Add color-matched outline for the preview face (thinner and slightly expanded outwards)
+            // Add color-matched outline (scales: 3.5px on small fruits → 14px on large fruits)
             ctx.beginPath();
             ctx.arc(0, 0, config.radius + 0.5, 0, Math.PI * 2);
             ctx.strokeStyle = FRUIT_LEVELS[type].color;
-            ctx.lineWidth = 7;
+            ctx.lineWidth = 3.5 + (type / 11) * 10.5;
             ctx.stroke();
           } else {
             ctx.beginPath(); ctx.arc(0, 0, config.radius, 0, Math.PI * 2); ctx.fillStyle = config.color; ctx.fill();
@@ -653,7 +653,7 @@ function GameContent({ loadedTextures, setGameId, gameId, darkMode, setDarkMode 
       </div>
 
        <div className="flex-1 w-full min-h-0 flex items-center justify-center overflow-hidden">
-         <div className={cn("relative aspect-[400/600] max-h-full rounded-3xl overflow-hidden shadow-2xl border-4 transition-colors", darkMode ? "bg-[#3a3a52] border-[#4a4a62]" : "bg-[#ffeeb2] border-[#e6d08b]")}>
+         <div className={cn("relative aspect-[400/600] max-h-full rounded-3xl overflow-hidden shadow-2xl border-4 transition-colors", darkMode ? "bg-[#3a3a52] border-[#4a4a62]" : "bg-[#d4e6f1] border-[#b8d4e3]")}>
            <canvas
              ref={canvasRef}
              className="w-full h-full object-contain block"
